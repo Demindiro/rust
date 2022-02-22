@@ -43,6 +43,9 @@ cfg_if::cfg_if! {
         // L4Re is unix family but does not yet support unwinding.
         #[path = "dummy.rs"]
         mod real_imp;
+	} else if #[cfg(target_os = "norostb")] {
+        #[path = "norostb.rs"]
+        mod real_imp;
     } else if #[cfg(target_env = "msvc")] {
         #[path = "seh.rs"]
         mod real_imp;
