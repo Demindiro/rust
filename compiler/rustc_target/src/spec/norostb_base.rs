@@ -1,9 +1,6 @@
-use crate::spec::{LinkArgs, LinkerFlavor, LldFlavor, PanicStrategy, TargetOptions};
+use crate::spec::{LinkerFlavor, LldFlavor, PanicStrategy, TargetOptions};
 
 pub fn opts() -> TargetOptions {
-    let mut pre_link_args = LinkArgs::new();
-    pre_link_args
-        .insert(LinkerFlavor::Lld(LldFlavor::Ld), Vec::from(["/tmp/hello_std/rtbegin.o".into()]));
     TargetOptions {
         os: "norostb".into(),
         executables: true,
@@ -12,7 +9,6 @@ pub fn opts() -> TargetOptions {
         //linker: Some("rust-lld".into()),
         linker: Some("ld.lld".into()),
         linker_flavor: LinkerFlavor::Lld(LldFlavor::Ld),
-        pre_link_args,
         panic_strategy: PanicStrategy::Abort,
         ..Default::default()
     }

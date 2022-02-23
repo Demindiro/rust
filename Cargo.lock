@@ -516,6 +516,10 @@ name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
+dependencies = [
+ "compiler_builtins",
+ "rustc-std-workspace-core",
+]
 
 [[package]]
 name = "chalk-derive"
@@ -2439,6 +2443,24 @@ name = "normalize-line-endings"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "61807f77802ff30975e01f4f071c8ba10c022052f98b3294119f3e615d13e5be"
+
+[[package]]
+name = "norostb_kernel"
+version = "0.1.0"
+dependencies = [
+ "compiler_builtins",
+ "rustc-std-workspace-core",
+]
+
+[[package]]
+name = "norostb_rt"
+version = "0.1.0"
+dependencies = [
+ "cfg-if 1.0.0",
+ "compiler_builtins",
+ "norostb_kernel",
+ "rustc-std-workspace-core",
+]
 
 [[package]]
 name = "ntapi"
@@ -4926,6 +4948,7 @@ dependencies = [
  "hermit-abi 0.2.0",
  "libc",
  "miniz_oxide",
+ "norostb_rt",
  "object 0.26.2",
  "panic_abort",
  "panic_unwind",
