@@ -3,6 +3,7 @@ use crate::ffi::CStr;
 use crate::io;
 use crate::num::NonZeroUsize;
 use crate::time::Duration;
+use norostb_rt::kernel::syscall;
 
 pub struct Thread(!);
 
@@ -15,15 +16,15 @@ impl Thread {
     }
 
     pub fn yield_now() {
-        // do nothing
+        syscall::sleep(Duration::ZERO);
     }
 
     pub fn set_name(_name: &CStr) {
         // nope
     }
 
-    pub fn sleep(_dur: Duration) {
-        panic!("can't sleep");
+    pub fn sleep(dur: Duration) {
+        syscall::sleep(dur);
     }
 
     pub fn join(self) {
