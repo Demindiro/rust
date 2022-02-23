@@ -74,6 +74,7 @@ mod linux_uclibc_base;
 mod msvc_base;
 mod netbsd_base;
 mod norostb_base;
+mod norostb_kernel_base;
 mod openbsd_base;
 mod redox_base;
 mod solaris_base;
@@ -1035,6 +1036,8 @@ supported_targets! {
     ("mips64-openwrt-linux-musl", mips64_openwrt_linux_musl),
 
     ("x86_64-unknown-norostb", x86_64_unknown_norostb),
+    ("i686-unknown-none-norostbkernel", i686_unknown_none_norostbkernel),
+    ("x86_64-unknown-none-norostbkernel", x86_64_unknown_none_norostbkernel),
 }
 
 /// Cow-Vec-Str: Cow<'static, [Cow<'static, str>]>

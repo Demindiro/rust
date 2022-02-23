@@ -24,13 +24,22 @@ impl Stdout {
 
 impl io::Write for Stdout {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let len;
+        let status @ len: usize;
         unsafe {
-            crate::arch::asm!("
-				syscall
-			", in("eax") 1, in("edi") 1, in("rsi") buf.as_ptr(), in("rdx") buf.len(), lateout("rax") len);
+            crate::arch::asm!(
+                "syscall",
+                in("eax") 0,
+                in("rdi") buf.as_ptr(),
+                in("rsi") buf.len(),
+                lateout("rax") status,
+                lateout("rdx") len,
+                lateout("rcx") _,
+                lateout("r11") _,
+            );
         }
-        Ok(len)
+        (status == 0)
+            .then(|| len)
+            .ok_or(io::const_io_error!(io::ErrorKind::Uncategorized, "failed to write to syslog"))
     }
 
     fn flush(&mut self) -> io::Result<()> {
@@ -46,13 +55,22 @@ impl Stderr {
 
 impl io::Write for Stderr {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let len;
+        let status @ len: usize;
         unsafe {
-            crate::arch::asm!("
-				syscall
-			", in("eax") 1, in("edi") 2, in("rsi") buf.as_ptr(), in("rdx") buf.len(), lateout("rax") len);
+            crate::arch::asm!(
+                "syscall",
+                in("eax") 0,
+                in("rdi") buf.as_ptr(),
+                in("rsi") buf.len(),
+                lateout("rax") status,
+                lateout("rdx") len,
+                lateout("rcx") _,
+                lateout("r11") _,
+            );
         }
-        Ok(len)
+        (status == 0)
+            .then(|| len)
+            .ok_or(io::const_io_error!(io::ErrorKind::Uncategorized, "failed to write to syslog"))
     }
 
     fn flush(&mut self) -> io::Result<()> {

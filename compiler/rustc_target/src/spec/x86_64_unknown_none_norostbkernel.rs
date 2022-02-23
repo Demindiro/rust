@@ -8,11 +8,12 @@ pub fn target() -> Target {
             .into(),
         arch: "x86_64".into(),
         options: TargetOptions {
-            cpu: "x86-64".into(),
-            disable_redzone: true,
-            features: "-mmx,-sse,+soft-float".into(),
+            cpu: "x86-64".to_string(),
             max_atomic_width: Some(64),
-            ..super::norostb_base::opts()
+            features:
+                "-mmx,-sse,-sse2,-sse3,-ssse3,-sse4.1,-sse4.2,-3dnow,-3dnowa,-avx,-avx2,+soft-float"
+                    .into(),
+            ..super::norostb_kernel_base::opts()
         },
     }
 }

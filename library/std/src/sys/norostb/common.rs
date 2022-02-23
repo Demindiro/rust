@@ -33,12 +33,7 @@ pub fn decode_error_kind(_code: i32) -> crate::io::ErrorKind {
 
 pub fn abort_internal() -> ! {
     unsafe {
-        crate::arch::asm!("
-			syscall
-		",
-		in("eax") 60,
-		in("edi") 101,
-		options(noreturn));
+        crate::arch::asm!("hlt; hlt; hlt; ud2", options(noreturn));
     }
 }
 
