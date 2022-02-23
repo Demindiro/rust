@@ -13,11 +13,8 @@ pub unsafe fn cleanup(_ptr: *mut u8) -> Box<dyn Any + Send> {
 }
 
 pub unsafe fn panic(_data: Box<dyn Any + Send>) -> u32 {
-	u32::MAX
-	/*
     extern "C" {
         pub fn __rust_abort() -> !;
     }
     __rust_abort();
-	*/
 }
