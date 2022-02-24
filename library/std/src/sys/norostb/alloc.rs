@@ -1,4 +1,5 @@
 use crate::alloc::{GlobalAlloc, Layout, System};
+use crate::ptr;
 
 #[repr(align(16))]
 #[derive(Clone, Copy)]
@@ -28,7 +29,20 @@ unsafe impl GlobalAlloc for System {
     unsafe fn dealloc(&self, _ptr: *mut u8, _layout: Layout) {}
 
     #[inline]
-    unsafe fn realloc(&self, _ptr: *mut u8, _layout: Layout, _new_size: usize) -> *mut u8 {
-        0 as *mut u8
+    unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
+        if layout.size() >= new_size {
+            return ptr;
+        }
+        // SAFETY: the caller has to ensure new_size doesn't overflow
+        let new_layout = unsafe { Layout::from_size_align_unchecked(new_size, layout.align()) };
+        // SAFETY: the caller has to ensure new_size is non-zero
+        let new_ptr = unsafe { self.alloc_zeroed(new_layout) };
+        if !new_ptr.is_null() {
+            // SAFETY: the old and new pointer are both valid and cannot overlap.
+            unsafe {
+                ptr::copy_nonoverlapping(ptr, new_ptr, layout.size().min(new_size));
+            }
+        }
+        new_ptr
     }
 }

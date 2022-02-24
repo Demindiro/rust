@@ -36,3 +36,23 @@ pub use common::*;
 pub extern "C" fn __rust_abort() {
     abort_internal();
 }
+
+/// # Safety
+///
+/// Must be called only once during runtime initialization.
+///
+/// # Note
+///
+/// This is not guaranteed to run, for example when Rust code is called externally.
+pub unsafe fn init(_argc: isize, _argv: *const *const u8) {
+    unsafe { stdio::init() }
+}
+
+/// # Safety
+///
+/// Must be called only once during runtime cleanup.
+///
+/// # Note
+///
+/// This is not guaranteed to run, for example when Rust code is called externally.
+pub unsafe fn cleanup() {}
