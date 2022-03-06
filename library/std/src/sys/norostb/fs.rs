@@ -52,7 +52,9 @@ pub enum DirEntry {
 }
 
 #[derive(Clone, Debug)]
-pub struct OpenOptions {}
+pub struct OpenOptions {
+    create: bool,
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FilePermissions(());
@@ -223,24 +225,43 @@ impl DirEntry {
 
 impl OpenOptions {
     pub fn new() -> OpenOptions {
-        OpenOptions {}
+        OpenOptions { create: false }
     }
 
     pub fn read(&mut self, _read: bool) {}
     pub fn write(&mut self, _write: bool) {}
     pub fn append(&mut self, _append: bool) {}
     pub fn truncate(&mut self, _truncate: bool) {}
-    pub fn create(&mut self, _create: bool) {}
-    pub fn create_new(&mut self, _create_new: bool) {}
+    pub fn create(&mut self, create: bool) {
+        self.create = create;
+    }
+    pub fn create_new(&mut self, create_new: bool) {
+        self.create = create_new;
+    }
 }
 
 impl File {
-    pub fn open(path: &Path, _opts: &OpenOptions) -> io::Result<File> {
-        // Find a unique ID
-        let (table_id, id) = find_unique_object_with_path(path)?;
-        syscall::open(table_id, id)
-            .map_err(|_| io::const_io_error!(io::ErrorKind::Other, "failed to open object"))
-            .map(|handle| File { handle })
+    pub fn open(path: &Path, opts: &OpenOptions) -> io::Result<File> {
+        if opts.create {
+            // syscall::create takes only a table ID and a string representing tags
+            let mut path = path_inner(path).splitn(2, |c| *c == b'/');
+            let table = path.next().expect("at least one match");
+            let tags = if let Some(p) = path.next() {
+                p
+            } else {
+                return Err(io::const_io_error!(io::ErrorKind::Other, "expected full path"));
+            };
+            let table = find_table(table)?.0;
+            syscall::create(table, tags, crate::time::Duration::MAX)
+                .map_err(|_| io::const_io_error!(io::ErrorKind::Other, "failed to open object"))
+                .map(|handle| File { handle })
+        } else {
+            // Find a unique ID
+            let (table_id, id) = find_unique_object_with_path(path)?;
+            syscall::open(table_id, id)
+                .map_err(|_| io::const_io_error!(io::ErrorKind::Other, "failed to open object"))
+                .map(|handle| File { handle })
+        }
     }
 
     pub fn file_attr(&self) -> io::Result<FileAttr> {
