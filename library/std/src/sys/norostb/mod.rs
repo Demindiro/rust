@@ -45,7 +45,11 @@ pub extern "C" fn __rust_abort() {
 ///
 /// This is not guaranteed to run, for example when Rust code is called externally.
 pub unsafe fn init(_argc: isize, _argv: *const *const u8) {
-    unsafe { stdio::init() }
+    // FIXME this is not guaranteed to run.
+    unsafe {
+        thread_local_key::init_thread();
+        stdio::init();
+    }
 }
 
 /// # Safety

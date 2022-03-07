@@ -1,47 +1,44 @@
-use crate::ptr;
+// TODO move part of this to the runtime crate as other languages will need
+// to share the same implementation.
+
+use crate::ptr::NonNull;
+use norostb_rt::tls;
 
 pub type Key = usize;
 
-// FIXME implement real TLS
-static mut TLS: Vec<(*mut u8, Option<unsafe extern "C" fn(*mut u8)>)> = Vec::new();
-
-#[inline]
-pub unsafe fn create(dtor: Option<unsafe extern "C" fn(*mut u8)>) -> Key {
+/// # Safety
+///
+/// This must be called exactly once when a thread is created.
+pub(super) unsafe fn init_thread() {
     unsafe {
-        TLS.push((ptr::null_mut(), dtor));
-        TLS.len() - 1
+        tls::init_thread::<_, ()>(|s| {
+            Ok(NonNull::new(Box::into_raw(Box::<[u8]>::new_uninit_slice(s)) as *mut *mut ())
+                .unwrap())
+        })
+        .expect("failed to initialize TLS storage");
     }
 }
 
 #[inline]
+pub unsafe fn create(dtor: Option<unsafe extern "C" fn(*mut u8)>) -> Key {
+    tls::allocate(dtor).expect("failed to allocate TLS slot").0
+}
+
+#[inline]
 pub unsafe fn set(key: Key, value: *mut u8) {
-    // TODO do we have to call the destructor on the old value?
     unsafe {
-        debug_assert!(key < TLS.len());
-        TLS.get_unchecked_mut(key).0 = value;
+        tls::set(tls::Key(key), value);
     }
 }
 
 #[inline]
 pub unsafe fn get(key: Key) -> *mut u8 {
-    unsafe {
-        debug_assert!(key < TLS.len());
-        TLS.get_unchecked(key).0
-    }
+    unsafe { tls::get(tls::Key(key)) }
 }
 
 #[inline]
 pub unsafe fn destroy(key: Key) {
-    unsafe {
-        debug_assert!(key < TLS.len());
-        let p = TLS.get_unchecked(key);
-        if let Some(f) = p.1 {
-            if !p.0.is_null() {
-                f(p.0);
-            }
-        }
-        let _ = p;
-    }
+    unsafe { tls::free(tls::Key(key)) }
 }
 
 #[inline]

@@ -2459,6 +2459,7 @@ dependencies = [
  "cfg-if 1.0.0",
  "compiler_builtins",
  "norostb_kernel",
+ "rustc-std-workspace-alloc",
  "rustc-std-workspace-core",
 ]
 

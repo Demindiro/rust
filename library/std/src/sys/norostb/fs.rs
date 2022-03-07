@@ -332,7 +332,9 @@ impl File {
     }
 
     pub fn duplicate(&self) -> io::Result<File> {
-        unsupported()
+        syscall::duplicate_handle(self.handle)
+            .map_err(|_| io::const_io_error!(io::ErrorKind::Uncategorized, "TODO failed duplicate"))
+            .map(|handle| Self { handle })
     }
 
     pub fn set_permissions(&self, _perm: FilePermissions) -> io::Result<()> {
