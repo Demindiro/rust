@@ -357,7 +357,7 @@ pub fn readdir(path: &Path) -> io::Result<ReadDir> {
         SplitPath::None => Ok(ReadDir::Tables(None)),
         SplitPath::Table { table } => {
             let (table_id, table_info) = find_table(table)?;
-            let query = syscall::query_table(table_id, None, &[])
+            let query = syscall::query_table(table_id, &[])
                 .map_err(|_| io::const_io_error!(io::ErrorKind::Other, "error querying table"))?;
             Ok(ReadDir::Objects { table_id, table_info, query })
         }
@@ -365,7 +365,7 @@ pub fn readdir(path: &Path) -> io::Result<ReadDir> {
             let mut t = [Default::default(); 256];
             let tags = split_tags(tags, &mut t)?;
             let (table_id, table_info) = find_table(table)?;
-            let query = syscall::query_table(table_id, None, tags)
+            let query = syscall::query_table(table_id, tags)
                 .map_err(|_| io::const_io_error!(io::ErrorKind::Other, "error querying table"))?;
             Ok(ReadDir::Objects { table_id, table_info, query })
         }
@@ -519,7 +519,7 @@ fn id_to_ascii(id: Id, buf: &mut [u8; 20]) -> &[u8] {
 fn find_unique_object(table_id: TableId, tags: &[u8]) -> io::Result<Id> {
     let mut t = [Default::default(); 256];
     let tags = split_tags(tags, &mut t)?;
-    let query = syscall::query_table(table_id, None, tags)
+    let query = syscall::query_table(table_id, tags)
         .map_err(|_| io::const_io_error!(io::ErrorKind::Other, "error querying table"))?;
     let mut info = ObjectInfo::default();
     syscall::query_next(query, &mut info)
