@@ -1,9 +1,9 @@
 use crate::io;
 use norostb_rt::kernel::syscall;
 
-static STDIN: syscall::Handle = syscall::Handle(0);
-static STDOUT: syscall::Handle = syscall::Handle(1);
-static STDERR: syscall::Handle = syscall::Handle(2);
+static STDIN: syscall::Handle = 0;
+static STDOUT: syscall::Handle = 1;
+static STDERR: syscall::Handle = 2;
 
 pub struct Stdin;
 pub struct Stdout;
@@ -19,8 +19,7 @@ impl Stdin {
 
 impl io::Read for Stdin {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        syscall::read(STDIN, buf)
-            .map_err(|_| io::const_io_error!(io::ErrorKind::Uncategorized, "failed to read"))
+        super::io::read(STDIN, buf)
     }
 }
 
@@ -32,8 +31,7 @@ impl Stdout {
 
 impl io::Write for Stdout {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        syscall::write(STDOUT, buf)
-            .map_err(|_| io::const_io_error!(io::ErrorKind::Uncategorized, "failed to write"))
+        super::io::write(STDOUT, buf)
     }
 
     fn flush(&mut self) -> io::Result<()> {
@@ -49,8 +47,7 @@ impl Stderr {
 
 impl io::Write for Stderr {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        syscall::write(STDERR, buf)
-            .map_err(|_| io::const_io_error!(io::ErrorKind::Uncategorized, "failed to write"))
+        super::io::write(STDERR, buf)
     }
 
     fn flush(&mut self) -> io::Result<()> {
@@ -63,30 +60,17 @@ pub fn is_ebadf(_err: &io::Error) -> bool {
 }
 
 pub fn panic_output() -> Option<impl io::Write> {
-    Some(syscall::SysLog::default())
-}
-
-#[unstable(feature = "norostb", issue = "none")]
-impl io::Write for syscall::SysLog {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.write_raw(buf);
-        Ok(buf.len())
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(self.flush())
-    }
+    Some(Stderr)
 }
 
 /// # Safety
 ///
 /// Must be called only once during runtime initialization.
 pub(super) unsafe fn init() {
-    use syscall::{Id, TableId};
-    let stdin = syscall::open(TableId(0), Id(0)).unwrap();
+    let stdin = super::io::open(0, 0).unwrap();
     assert_eq!(stdin, STDIN);
-    let stdout = syscall::open(TableId(0), Id(0)).unwrap();
+    let stdout = super::io::open(0, 0).unwrap();
     assert_eq!(stdout, STDOUT);
-    let stderr = syscall::open(TableId(0), Id(0)).unwrap();
+    let stderr = super::io::open(0, 0).unwrap();
     assert_eq!(stderr, STDERR);
 }

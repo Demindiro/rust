@@ -133,6 +133,8 @@ pub mod l4re;
 pub mod macos;
 #[cfg(target_os = "netbsd")]
 pub mod netbsd;
+#[cfg(target_os = "norostb")]
+pub mod norostb;
 #[cfg(target_os = "openbsd")]
 pub mod openbsd;
 #[cfg(target_os = "redox")]

@@ -144,8 +144,8 @@ impl Iterator for ReadDir {
             }),
             Self::Objects { table_id, table_info, query } => {
                 let mut info = ObjectInfo::new(&mut buf);
-                match syscall::query_next(query, &mut info) {
-                    Ok(()) => {
+                match super::io::query_next(query, &mut info) {
+                    Ok(true) => {
                         let inner = if info.tags_count() == 0 {
                             Vec::new()
                         } else {
@@ -165,8 +165,7 @@ impl Iterator for ReadDir {
                         *self = Self::Objects { table_id, table_info: table_info.clone(), query };
                         Some(Ok(DirEntry::Object { table_id, table_info, name, id: info.id }))
                     }
-                    // TODO don't hardcode error code
-                    Err((e, 0)) if e.get() == 1 => None,
+                    Ok(false) => None,
                     Err(_) => unreachable!("kernel returned unknown error code"),
                 }
             }
@@ -203,7 +202,7 @@ impl DirEntry {
                 OsString::from_inner(Buf { inner }).into()
             }
             Self::Object { id, .. } => {
-                OsString::from_inner(Buf { inner: id.0.to_string().into() }).into()
+                OsString::from_inner(Buf { inner: id.to_string().into() }).into()
             }
         }
     }
@@ -252,15 +251,11 @@ impl File {
                 return Err(io::const_io_error!(io::ErrorKind::Other, "expected full path"));
             };
             let table = find_table(table)?.0;
-            syscall::create(table, tags, crate::time::Duration::MAX)
-                .map_err(|_| io::const_io_error!(io::ErrorKind::Other, "failed to open object"))
-                .map(|handle| File { handle })
+            super::io::create(table, tags).map(|handle| File { handle })
         } else {
             // Find a unique ID
             let (table_id, id) = find_unique_object_with_path(path)?;
-            syscall::open(table_id, id)
-                .map_err(|_| io::const_io_error!(io::ErrorKind::Other, "failed to open object"))
-                .map(|handle| File { handle })
+            super::io::open(table_id, id).map(|handle| File { handle })
         }
     }
 
@@ -283,8 +278,7 @@ impl File {
     }
 
     pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
-        syscall::read(self.handle, buf)
-            .map_err(|_| io::const_io_error!(io::ErrorKind::Uncategorized, "TODO failed read"))
+        super::io::read(self.handle, buf)
     }
 
     pub fn read_vectored(&self, _bufs: &mut [IoSliceMut<'_>]) -> io::Result<usize> {
@@ -296,10 +290,9 @@ impl File {
     }
 
     pub fn read_buf(&self, buf: &mut ReadBuf<'_>) -> io::Result<()> {
-        // SAFETY: we don't deinitialize any part of the buffer/
+        // SAFETY: we don't deinitialize any part of the buffer
         let s = unsafe { buf.unfilled_mut() };
-        let len = syscall::read_uninit(self.handle, s)
-            .map_err(|_| io::const_io_error!(io::ErrorKind::Uncategorized, "TODO failed read"))?;
+        let len = super::io::read_uninit(self.handle, s)?;
         // SAFETY: the kernel has initialized `len` bytes.
         unsafe {
             buf.assume_init(buf.filled().len() + len);
@@ -309,8 +302,7 @@ impl File {
     }
 
     pub fn write(&self, buf: &[u8]) -> io::Result<usize> {
-        syscall::write(self.handle, buf)
-            .map_err(|_| io::const_io_error!(io::ErrorKind::Uncategorized, "TODO failed write"))
+        super::io::write(self.handle, buf)
     }
 
     pub fn write_vectored(&self, _bufs: &[IoSlice<'_>]) -> io::Result<usize> {
@@ -357,19 +349,15 @@ pub fn readdir(path: &Path) -> io::Result<ReadDir> {
         SplitPath::None => Ok(ReadDir::Tables(None)),
         SplitPath::Table { table } => {
             let (table_id, table_info) = find_table(table)?;
-            let query = syscall::query_table(table_id, &[])
-                .map_err(|_| io::const_io_error!(io::ErrorKind::Other, "error querying table"))?;
+            let query = super::io::query(table_id, &[])?;
             Ok(ReadDir::Objects { table_id, table_info, query })
         }
         SplitPath::Tags { table, tags } => {
-            let mut t = [Default::default(); 256];
-            let tags = split_tags(tags, &mut t)?;
             let (table_id, table_info) = find_table(table)?;
-            let query = syscall::query_table(table_id, tags)
-                .map_err(|_| io::const_io_error!(io::ErrorKind::Other, "error querying table"))?;
+            let query = super::io::query(table_id, tags)?;
             Ok(ReadDir::Objects { table_id, table_info, query })
         }
-        SplitPath::Id { table, tags, id } => todo!("{:?}/{:?}/{}", table, tags, id.0),
+        SplitPath::Id { table, tags, id } => todo!("{:?}/{:?}/{}", table, tags, id),
     }
 }
 
@@ -488,17 +476,14 @@ fn path_inner(path: &Path) -> &[u8] {
 
 /// Convert an ASCII string to an [`Id`].
 fn ascii_to_id(s: &[u8]) -> io::Result<Id> {
-    s.iter()
-        .try_fold(0, |v, &d| match d {
-            b'0'..=b'9' => Ok(v + u64::from(d - b'0')),
-            _ => Err(io::const_io_error!(io::ErrorKind::InvalidInput, "invalid ID digit")),
-        })
-        .map(Id)
+    s.iter().try_fold(0, |v, &d| match d {
+        b'0'..=b'9' => Ok(v + u64::from(d - b'0')),
+        _ => Err(io::const_io_error!(io::ErrorKind::InvalidInput, "invalid ID digit")),
+    })
 }
 
 /// Convert an [`Id`] to an ASCII string.
-fn id_to_ascii(id: Id, buf: &mut [u8; 20]) -> &[u8] {
-    let mut id = id.0;
+fn id_to_ascii(mut id: Id, buf: &mut [u8; 20]) -> &[u8] {
     let mut len = 0;
     for c in buf.iter_mut().rev() {
         *c = (id % 10) as u8 + b'0';
@@ -517,14 +502,10 @@ fn id_to_ascii(id: Id, buf: &mut [u8; 20]) -> &[u8] {
 ///
 /// There are no or multiple objects matching the tags.
 fn find_unique_object(table_id: TableId, tags: &[u8]) -> io::Result<Id> {
-    let mut t = [Default::default(); 256];
-    let tags = split_tags(tags, &mut t)?;
-    let query = syscall::query_table(table_id, tags)
-        .map_err(|_| io::const_io_error!(io::ErrorKind::Other, "error querying table"))?;
+    let query = super::io::query(table_id, tags)?;
     let mut info = ObjectInfo::default();
-    syscall::query_next(query, &mut info)
-        .map_err(|_| io::const_io_error!(io::ErrorKind::Other, "no object with tags"))?;
-    if syscall::query_next(query, &mut ObjectInfo::default()).is_ok() {
+    super::io::query_next(query, &mut info)?;
+    if super::io::query_next(query, &mut ObjectInfo::default()).is_ok() {
         return Err(io::const_io_error!(io::ErrorKind::Other, "multiple objects with tags"));
     }
     return Ok(info.id);
@@ -547,18 +528,4 @@ fn find_unique_object_with_path(path: &Path) -> io::Result<(TableId, Id)> {
             Err(io::const_io_error!(io::ErrorKind::InvalidInput, "expected tags and/or id"))
         }
     }
-}
-
-/// Split a string of tags separated by commas (`','`).
-fn split_tags<'a, 'b>(
-    tags: &'a [u8],
-    buf: &'b mut [syscall::Slice<'a, u8>; 256],
-) -> io::Result<&'b [syscall::Slice<'a, u8>]> {
-    let mut i = 0;
-    for t in tags.split(|c| *c == TAG_SEPARATOR) {
-        let e = io::const_io_error!(io::ErrorKind::InvalidInput, "too many tags");
-        *buf.get_mut(i).ok_or(e)? = t.into();
-        i += 1;
-    }
-    Ok(&buf[..i])
 }
