@@ -71,11 +71,13 @@ fn enqueue(request: Request) -> Response {
     QUEUE.with(|queue| unsafe {
         let mut queue = queue.borrow_mut();
         queue.enqueue_request(request).unwrap();
-        syscall::process_io_queue(queue.base.as_ptr().cast()).unwrap();
+        let base = queue.base.as_ptr().cast();
+        syscall::process_io_queue(base).unwrap();
         loop {
             if let Ok(e) = queue.dequeue_response() {
                 break e;
             }
+            syscall::wait_io_queue(base).unwrap();
         }
     })
 }
@@ -171,10 +173,7 @@ pub fn query(table: syscall::TableId, tags: &[u8]) -> io::Result<syscall::QueryH
 /// Blocking query_next
 #[unstable(feature = "norostb", issue = "none")]
 #[inline]
-pub fn query_next(
-    query: syscall::QueryHandle,
-    info: &mut syscall::ObjectInfo<'_>,
-) -> io::Result<bool> {
+pub fn query_next(query: syscall::QueryHandle, info: &mut syscall::ObjectInfo) -> io::Result<bool> {
     let e = enqueue(Request::query_next(0, query, info));
     if e.value < 0 {
         Err(io::const_io_error!(io::ErrorKind::Uncategorized, "failed to advance query"))

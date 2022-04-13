@@ -30,7 +30,6 @@ pub struct File {
 }
 
 const TABLE_OBJECT_SEPARATOR: u8 = b'/';
-const TAG_SEPARATOR: u8 = b',';
 
 #[derive(Clone, Debug)]
 pub enum FileAttr {
@@ -135,7 +134,6 @@ impl Iterator for ReadDir {
     type Item = io::Result<DirEntry>;
 
     fn next(&mut self) -> Option<io::Result<DirEntry>> {
-        let mut buf = [0; 4096];
         match mem::replace(self, Self::None) {
             Self::None => None,
             Self::Tables(tbl) => syscall::next_table(tbl).map(|(id, info)| {
@@ -143,24 +141,12 @@ impl Iterator for ReadDir {
                 Ok(DirEntry::Table { id, info })
             }),
             Self::Objects { table_id, table_info, query } => {
-                let mut info = ObjectInfo::new(&mut buf);
+                let mut inner = Vec::with_capacity(4096);
+                inner.resize(4096, 0);
+                let mut info = ObjectInfo::new(&mut inner);
                 match super::io::query_next(query, &mut info) {
                     Ok(true) => {
-                        let inner = if info.tags_count() == 0 {
-                            Vec::new()
-                        } else {
-                            let len =
-                                (0..info.tags_count()).map(|i| info.tag(i).len()).sum::<usize>()
-                                    + info.tags_count()
-                                    - 1;
-                            let mut inner = Vec::with_capacity(len);
-                            inner.extend(info.tag(0));
-                            for t in (1..info.tags_count()).map(|i| info.tag(i)) {
-                                inner.push(TAG_SEPARATOR);
-                                inner.extend(t);
-                            }
-                            inner
-                        };
+                        inner.resize(info.path_len, 0);
                         let name = OsString::from_inner(Buf { inner }).into();
                         *self = Self::Objects { table_id, table_info: table_info.clone(), query };
                         Some(Ok(DirEntry::Object { table_id, table_info, name, id: info.id }))

@@ -1,4 +1,4 @@
 #![unstable(feature = "norostb", issue = "none")]
 
-pub use crate::sys::io::{read, write, open, create, query, query_next, take_job, finish_job};
-pub use norostb_rt::kernel::syscall::{ObjectInfo, Job};
+pub use crate::sys::io::{create, finish_job, open, query, query_next, read, take_job, write};
+pub use norostb_rt::kernel::syscall::{Job, ObjectInfo};
