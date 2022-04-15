@@ -1,7 +1,7 @@
 /// ## Path format
 ///
 /// ```
-/// table/[tags,...[/id]]
+/// table/[path]
 /// ```
 ///
 /// ### Examples
@@ -22,7 +22,7 @@ use crate::sys::os_str::Buf;
 use crate::sys::time::SystemTime;
 use crate::sys::unsupported;
 use crate::sys_common::{AsInner, FromInner};
-use norostb_rt::kernel::syscall::{self, Handle, Id, ObjectInfo, QueryHandle, TableId, TableInfo};
+use norostb_rt::kernel::syscall::{self, Handle, ObjectInfo, QueryHandle, TableId, TableInfo};
 
 #[derive(Debug)]
 pub struct File {
@@ -47,7 +47,7 @@ pub enum ReadDir {
 #[derive(Clone, Debug)]
 pub enum DirEntry {
     Table { id: TableId, info: TableInfo },
-    Object { table_id: TableId, table_info: TableInfo, id: Id, name: OsString },
+    Object { table_id: TableId, table_info: TableInfo, name: OsString },
 }
 
 #[derive(Clone, Debug)]
@@ -149,7 +149,7 @@ impl Iterator for ReadDir {
                         inner.resize(info.path_len, 0);
                         let name = OsString::from_inner(Buf { inner }).into();
                         *self = Self::Objects { table_id, table_info: table_info.clone(), query };
-                        Some(Ok(DirEntry::Object { table_id, table_info, name, id: info.id }))
+                        Some(Ok(DirEntry::Object { table_id, table_info, name }))
                     }
                     Ok(false) => None,
                     Err(_) => unreachable!("kernel returned unknown error code"),
@@ -166,14 +166,12 @@ impl DirEntry {
                 let inner = info.name().into();
                 OsString::from_inner(Buf { inner }).into()
             }
-            Self::Object { table_info, name, id, .. } => {
+            Self::Object { table_info, name, .. } => {
                 let inner = table_info
                     .name()
                     .iter()
                     .chain(&[TABLE_OBJECT_SEPARATOR])
                     .chain(&name.as_inner().inner)
-                    .chain(&[TABLE_OBJECT_SEPARATOR])
-                    .chain(id_to_ascii(*id, &mut [0; 20]))
                     .copied()
                     .collect();
                 OsString::from_inner(Buf { inner }).into()
@@ -187,9 +185,7 @@ impl DirEntry {
                 let inner = info.name().iter().copied().collect();
                 OsString::from_inner(Buf { inner }).into()
             }
-            Self::Object { id, .. } => {
-                OsString::from_inner(Buf { inner: id.to_string().into() }).into()
-            }
+            Self::Object { name, .. } => name.clone(),
         }
     }
 
@@ -228,20 +224,20 @@ impl OpenOptions {
 impl File {
     pub fn open(path: &Path, opts: &OpenOptions) -> io::Result<File> {
         if opts.create {
-            // syscall::create takes only a table ID and a string representing tags
+            // syscall::create takes only a table ID and a string representing path
             let mut path = path_inner(path).splitn(2, |c| *c == b'/');
             let table = path.next().expect("at least one match");
-            let tags = if let Some(p) = path.next() {
+            let path = if let Some(p) = path.next() {
                 p
             } else {
                 return Err(io::const_io_error!(io::ErrorKind::Other, "expected full path"));
             };
             let table = find_table(table)?.0;
-            super::io::create(table, tags).map(|handle| File { handle })
+            super::io::create(table, path).map(|handle| File { handle })
         } else {
             // Find a unique ID
-            let (table_id, id) = find_unique_object_with_path(path)?;
-            super::io::open(table_id, id).map(|handle| File { handle })
+            let (table_id, path) = split_into_table_and_path(path)?;
+            super::io::open(table_id, path).map(|handle| File { handle })
         }
     }
 
@@ -304,9 +300,8 @@ impl File {
         Ok(())
     }
 
-    pub fn seek(&self, _pos: SeekFrom) -> io::Result<u64> {
-        // TODO
-        unsupported()
+    pub fn seek(&self, pos: SeekFrom) -> io::Result<u64> {
+        super::io::seek(self.handle, pos)
     }
 
     pub fn duplicate(&self) -> io::Result<File> {
@@ -338,12 +333,11 @@ pub fn readdir(path: &Path) -> io::Result<ReadDir> {
             let query = super::io::query(table_id, &[])?;
             Ok(ReadDir::Objects { table_id, table_info, query })
         }
-        SplitPath::Tags { table, tags } => {
+        SplitPath::Path { table, path } => {
             let (table_id, table_info) = find_table(table)?;
-            let query = super::io::query(table_id, tags)?;
+            let query = super::io::query(table_id, path)?;
             Ok(ReadDir::Objects { table_id, table_info, query })
         }
-        SplitPath::Id { table, tags, id } => todo!("{:?}/{:?}/{}", table, tags, id),
     }
 }
 
@@ -386,7 +380,7 @@ pub fn link(_src: &Path, _dst: &Path) -> io::Result<()> {
 }
 
 pub fn stat(path: &Path) -> io::Result<FileAttr> {
-    let _ = find_unique_object_with_path(path)?;
+    let _ = split_into_table_and_path(path)?;
     // TODO stat doesn't actually exist yet though we do support FileAttr to some limited degree.
     Ok(FileAttr::Object { size: 0 })
 }
@@ -421,11 +415,10 @@ fn find_table(name: &[u8]) -> io::Result<(TableId, TableInfo)> {
 enum SplitPath<'a> {
     None,
     Table { table: &'a [u8] },
-    Tags { table: &'a [u8], tags: &'a [u8] },
-    Id { table: &'a [u8], tags: &'a [u8], id: Id },
+    Path { table: &'a [u8], path: &'a [u8] },
 }
 
-/// Split a path by table, tags and ID.
+/// Split a path by table, path and ID.
 fn split_path(path: &Path) -> io::Result<SplitPath<'_>> {
     let path = path_inner(path);
 
@@ -435,20 +428,17 @@ fn split_path(path: &Path) -> io::Result<SplitPath<'_>> {
 
     fn split(s: &[u8], sep: u8) -> Option<(&[u8], &[u8])> {
         s.iter().position(|c| *c == sep).map(|i| {
-            // TODO parse tags
-            let (table, tags) = s.split_at(i);
-            (table, &tags[1..])
+            // TODO parse path
+            let (table, path) = s.split_at(i);
+            (table, &path[1..])
         })
     }
 
-    if let Some((table, tags)) = split(path, TABLE_OBJECT_SEPARATOR) {
-        if let Some((tags, id)) = split(tags, TABLE_OBJECT_SEPARATOR) {
-            let id = ascii_to_id(id)?;
-            Ok(SplitPath::Id { table, tags, id })
-        } else if tags.is_empty() {
+    if let Some((table, path)) = split(path, TABLE_OBJECT_SEPARATOR) {
+        if path.is_empty() {
             Ok(SplitPath::Table { table })
         } else {
-            Ok(SplitPath::Tags { table, tags })
+            Ok(SplitPath::Path { table, path })
         }
     } else {
         Ok(SplitPath::Table { table: path })
@@ -460,58 +450,18 @@ fn path_inner(path: &Path) -> &[u8] {
     &path.as_os_str().as_inner().inner
 }
 
-/// Convert an ASCII string to an [`Id`].
-fn ascii_to_id(s: &[u8]) -> io::Result<Id> {
-    s.iter().try_fold(0, |v, &d| match d {
-        b'0'..=b'9' => Ok(v + u64::from(d - b'0')),
-        _ => Err(io::const_io_error!(io::ErrorKind::InvalidInput, "invalid ID digit")),
-    })
-}
-
-/// Convert an [`Id`] to an ASCII string.
-fn id_to_ascii(mut id: Id, buf: &mut [u8; 20]) -> &[u8] {
-    let mut len = 0;
-    for c in buf.iter_mut().rev() {
-        *c = (id % 10) as u8 + b'0';
-        id /= 10;
-        len += 1;
-        if id == 0 {
-            break;
-        }
-    }
-    &buf[buf.len() - len..]
-}
-
-/// Find exactly one object matching the given tags.
+/// Split a path into a table and object component
 ///
 /// # Errors
 ///
-/// There are no or multiple objects matching the tags.
-fn find_unique_object(table_id: TableId, tags: &[u8]) -> io::Result<Id> {
-    let query = super::io::query(table_id, tags)?;
-    let mut info = ObjectInfo::default();
-    super::io::query_next(query, &mut info)?;
-    if super::io::query_next(query, &mut ObjectInfo::default()).is_ok() {
-        return Err(io::const_io_error!(io::ErrorKind::Other, "multiple objects with tags"));
-    }
-    return Ok(info.id);
-}
-
-/// Find exactly one object matching the given path.
-///
-/// # Errors
-///
-/// There are no or multiple objects matching the path.
-fn find_unique_object_with_path(path: &Path) -> io::Result<(TableId, Id)> {
+/// - There is no separator.
+/// - The table does not exist.
+fn split_into_table_and_path(path: &Path) -> io::Result<(TableId, &[u8])> {
     // Find a unique ID
     match split_path(path)? {
-        SplitPath::Id { id, table, .. } => Ok((find_table(table)?.0, id)),
-        SplitPath::Tags { table, tags } => {
-            let (table_id, _) = find_table(table)?;
-            Ok((table_id, find_unique_object(table_id, tags)?))
-        }
+        SplitPath::Path { path, table } => Ok((find_table(table)?.0, path)),
         SplitPath::Table { .. } | SplitPath::None => {
-            Err(io::const_io_error!(io::ErrorKind::InvalidInput, "expected tags and/or id"))
+            Err(io::const_io_error!(io::ErrorKind::InvalidInput, "expected path and/or id"))
         }
     }
 }

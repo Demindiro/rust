@@ -2,7 +2,7 @@ use crate::cell::RefCell;
 use crate::io;
 use crate::mem::{self, MaybeUninit};
 use norostb_rt::kernel::{
-    io::{Queue, Request, Response},
+    io::{Queue, Request, Response, SeekFrom},
     syscall,
 };
 
@@ -116,8 +116,8 @@ pub fn write(handle: syscall::Handle, data: &[u8]) -> io::Result<usize> {
 /// Blocking open
 #[unstable(feature = "norostb", issue = "none")]
 #[inline]
-pub fn open(table: syscall::TableId, object: syscall::Id) -> io::Result<syscall::Handle> {
-    let e = enqueue(Request::open(0, table, object));
+pub fn open(table: syscall::TableId, path: &[u8]) -> io::Result<syscall::Handle> {
+    let e = enqueue(Request::open(0, table, path));
     if e.value < 0 {
         Err(io::const_io_error!(io::ErrorKind::Uncategorized, "failed to open"))
     } else {
@@ -135,8 +135,8 @@ pub fn open(table: syscall::TableId, object: syscall::Id) -> io::Result<syscall:
 /// Blocking create
 #[unstable(feature = "norostb", issue = "none")]
 #[inline]
-pub fn create(table: syscall::TableId, tags: &[u8]) -> io::Result<syscall::Handle> {
-    let e = enqueue(Request::create(0, table, tags));
+pub fn create(table: syscall::TableId, path: &[u8]) -> io::Result<syscall::Handle> {
+    let e = enqueue(Request::create(0, table, path));
     if e.value < 0 {
         Err(io::const_io_error!(io::ErrorKind::Uncategorized, "failed to create"))
     } else {
@@ -154,8 +154,8 @@ pub fn create(table: syscall::TableId, tags: &[u8]) -> io::Result<syscall::Handl
 /// Blocking query
 #[unstable(feature = "norostb", issue = "none")]
 #[inline]
-pub fn query(table: syscall::TableId, tags: &[u8]) -> io::Result<syscall::QueryHandle> {
-    let e = enqueue(Request::query(0, table, tags));
+pub fn query(table: syscall::TableId, path: &[u8]) -> io::Result<syscall::QueryHandle> {
+    let e = enqueue(Request::query(0, table, path));
     if e.value < 0 {
         Err(io::const_io_error!(io::ErrorKind::Uncategorized, "failed to query"))
     } else {
@@ -203,5 +203,23 @@ pub fn finish_job(table: syscall::Handle, job: &syscall::Job) -> io::Result<()> 
         Err(io::const_io_error!(io::ErrorKind::Uncategorized, "failed to finish job"))
     } else {
         Ok(())
+    }
+}
+
+/// Blocking seek
+#[unstable(feature = "norostb", issue = "none")]
+#[inline]
+pub fn seek(handle: syscall::Handle, from: io::SeekFrom) -> io::Result<u64> {
+    let mut offset = 0;
+    let from = match from {
+        io::SeekFrom::Start(n) => SeekFrom::Start(n),
+        io::SeekFrom::End(n) => SeekFrom::End(n),
+        io::SeekFrom::Current(n) => SeekFrom::Current(n),
+    };
+    let e = enqueue(Request::seek(0, handle, from, &mut offset));
+    if e.value < 0 {
+        Err(io::const_io_error!(io::ErrorKind::Uncategorized, "failed to seek"))
+    } else {
+        Ok(offset)
     }
 }

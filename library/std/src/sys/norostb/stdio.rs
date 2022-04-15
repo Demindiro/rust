@@ -67,10 +67,10 @@ pub fn panic_output() -> Option<impl io::Write> {
 ///
 /// Must be called only once during runtime initialization.
 pub(super) unsafe fn init() {
-    let stdin = super::io::open(0, 0).unwrap();
+    let stdin = super::io::open(0, b"0").unwrap();
     assert_eq!(stdin, STDIN);
-    let stdout = super::io::open(0, 0).unwrap();
+    let stdout = super::io::open(0, b"0").unwrap();
     assert_eq!(stdout, STDOUT);
-    let stderr = super::io::open(0, 0).unwrap();
+    let stderr = super::io::open(0, b"0").unwrap();
     assert_eq!(stderr, STDERR);
 }
