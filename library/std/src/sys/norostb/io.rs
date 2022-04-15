@@ -2,7 +2,7 @@ use crate::cell::RefCell;
 use crate::io;
 use crate::mem::{self, MaybeUninit};
 use norostb_rt::kernel::{
-    io::{Queue, Request, Response, SeekFrom},
+    io::{Job, ObjectInfo, Queue, Request, Response, SeekFrom},
     syscall,
 };
 
@@ -173,7 +173,7 @@ pub fn query(table: syscall::TableId, path: &[u8]) -> io::Result<syscall::QueryH
 /// Blocking query_next
 #[unstable(feature = "norostb", issue = "none")]
 #[inline]
-pub fn query_next(query: syscall::QueryHandle, info: &mut syscall::ObjectInfo) -> io::Result<bool> {
+pub fn query_next(query: syscall::QueryHandle, info: &mut ObjectInfo) -> io::Result<bool> {
     let e = enqueue(Request::query_next(0, query, info));
     if e.value < 0 {
         Err(io::const_io_error!(io::ErrorKind::Uncategorized, "failed to advance query"))
@@ -185,7 +185,7 @@ pub fn query_next(query: syscall::QueryHandle, info: &mut syscall::ObjectInfo) -
 /// Blocking take_job
 #[unstable(feature = "norostb", issue = "none")]
 #[inline]
-pub fn take_job(table: syscall::Handle, job: &mut syscall::Job) -> io::Result<()> {
+pub fn take_job(table: syscall::Handle, job: &mut Job) -> io::Result<()> {
     let e = enqueue(Request::take_job(0, table, job));
     if e.value < 0 {
         Err(io::const_io_error!(io::ErrorKind::Uncategorized, "failed to take job"))
@@ -197,7 +197,7 @@ pub fn take_job(table: syscall::Handle, job: &mut syscall::Job) -> io::Result<()
 /// Blocking finish_job
 #[unstable(feature = "norostb", issue = "none")]
 #[inline]
-pub fn finish_job(table: syscall::Handle, job: &syscall::Job) -> io::Result<()> {
+pub fn finish_job(table: syscall::Handle, job: &Job) -> io::Result<()> {
     let e = enqueue(Request::finish_job(0, table, &job));
     if e.value < 0 {
         Err(io::const_io_error!(io::ErrorKind::Uncategorized, "failed to finish job"))

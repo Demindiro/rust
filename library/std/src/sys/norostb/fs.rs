@@ -22,7 +22,10 @@ use crate::sys::os_str::Buf;
 use crate::sys::time::SystemTime;
 use crate::sys::unsupported;
 use crate::sys_common::{AsInner, FromInner};
-use norostb_rt::kernel::syscall::{self, Handle, ObjectInfo, QueryHandle, TableId, TableInfo};
+use norostb_rt::kernel::{
+    io::{Handle, ObjectInfo},
+    syscall::{self, QueryHandle, TableId, TableInfo},
+};
 
 #[derive(Debug)]
 pub struct File {
