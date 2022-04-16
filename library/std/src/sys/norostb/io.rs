@@ -3,7 +3,7 @@ use crate::io;
 use crate::mem::{self, MaybeUninit};
 use norostb_rt::kernel::{
     io::{Job, ObjectInfo, Queue, Request, Response, SeekFrom},
-    syscall,
+    syscall::{self, TableId, TableInfo},
 };
 
 #[derive(Copy, Clone)]
@@ -221,5 +221,31 @@ pub fn seek(handle: syscall::Handle, from: io::SeekFrom) -> io::Result<u64> {
         Err(io::const_io_error!(io::ErrorKind::Uncategorized, "failed to seek"))
     } else {
         Ok(offset)
+    }
+}
+
+/// Create an iterator over all tables.
+#[unstable(feature = "norostb", issue = "none")]
+#[inline]
+pub fn tables() -> TableIter {
+    TableIter { state: Some(None) }
+}
+
+/// An iterator over all tables.
+#[derive(Clone, Debug)]
+#[unstable(feature = "norostb", issue = "none")]
+pub struct TableIter {
+    state: Option<Option<TableId>>,
+}
+
+impl Iterator for TableIter {
+    type Item = (TableId, TableInfo);
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        self.state.take().and_then(|id| syscall::next_table(id)).map(|(id, info)| {
+            self.state = Some(Some(id));
+            (id, info)
+        })
     }
 }
