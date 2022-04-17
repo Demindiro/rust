@@ -224,6 +224,18 @@ pub fn seek(handle: syscall::Handle, from: io::SeekFrom) -> io::Result<u64> {
     }
 }
 
+/// Blocking poll
+#[unstable(feature = "norostb", issue = "none")]
+#[inline]
+pub fn poll(handle: syscall::Handle) -> io::Result<usize> {
+    let e = enqueue(Request::poll(0, handle));
+    if e.value < 0 {
+        Err(io::const_io_error!(io::ErrorKind::Uncategorized, "failed to poll"))
+    } else {
+        Ok(e.value as usize)
+    }
+}
+
 /// Create an iterator over all tables.
 #[unstable(feature = "norostb", issue = "none")]
 #[inline]
