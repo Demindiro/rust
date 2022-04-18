@@ -29,7 +29,7 @@ use norostb_rt::kernel::{
 
 #[derive(Debug)]
 pub struct File {
-    handle: Handle,
+    pub(crate) handle: Handle,
 }
 
 const TABLE_OBJECT_SEPARATOR: u8 = b'/';
