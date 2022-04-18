@@ -24,7 +24,7 @@ use crate::sys::unsupported;
 use crate::sys_common::{AsInner, FromInner};
 use norostb_rt::kernel::{
     io::{Handle, ObjectInfo},
-    syscall::{self, QueryHandle, TableId, TableInfo},
+    syscall::{self, TableId, TableInfo},
 };
 
 #[derive(Debug)]
@@ -44,7 +44,7 @@ pub enum FileAttr {
 pub enum ReadDir {
     None,
     Tables(Option<TableId>),
-    Objects { table_id: TableId, table_info: TableInfo, query: QueryHandle },
+    Objects { table_id: TableId, table_info: TableInfo, query: Handle },
 }
 
 #[derive(Clone, Debug)]

@@ -154,7 +154,7 @@ pub fn create(table: syscall::TableId, path: &[u8]) -> io::Result<syscall::Handl
 /// Blocking query
 #[unstable(feature = "norostb", issue = "none")]
 #[inline]
-pub fn query(table: syscall::TableId, path: &[u8]) -> io::Result<syscall::QueryHandle> {
+pub fn query(table: syscall::TableId, path: &[u8]) -> io::Result<syscall::Handle> {
     let e = enqueue(Request::query(0, table, path));
     if e.value < 0 {
         Err(io::const_io_error!(io::ErrorKind::Uncategorized, "failed to query"))
@@ -173,7 +173,7 @@ pub fn query(table: syscall::TableId, path: &[u8]) -> io::Result<syscall::QueryH
 /// Blocking query_next
 #[unstable(feature = "norostb", issue = "none")]
 #[inline]
-pub fn query_next(query: syscall::QueryHandle, info: &mut ObjectInfo) -> io::Result<bool> {
+pub fn query_next(query: syscall::Handle, info: &mut ObjectInfo) -> io::Result<bool> {
     let e = enqueue(Request::query_next(0, query, info));
     if e.value < 0 {
         Err(io::const_io_error!(io::ErrorKind::Uncategorized, "failed to advance query"))
