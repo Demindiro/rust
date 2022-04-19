@@ -54,13 +54,10 @@ impl<'a> IoSliceMut<'a> {
 
 thread_local! {
     static QUEUE: RefCell<Queue> = RefCell::new({
-        use crate::sync::atomic::*;
-        static ADDR: AtomicUsize = AtomicUsize::new(0x9_8765_0000);
-        let base = ADDR.fetch_add(0x1000, Ordering::Relaxed);
-        let base = syscall::create_io_queue(base as *mut _, 0, 0).unwrap();
-        let base = crate::ptr::NonNull::new(base).unwrap().cast();
         Queue {
-            base,
+            base: syscall::create_io_queue(None, 0, 0)
+                .unwrap_or_else(|e| rtabort!("failed to create io queue: {:?}", e))
+                .cast(),
             requests_mask: 0,
             responses_mask: 0,
         }
@@ -71,13 +68,12 @@ fn enqueue(request: Request) -> Response {
     QUEUE.with(|queue| unsafe {
         let mut queue = queue.borrow_mut();
         queue.enqueue_request(request).unwrap();
-        let base = queue.base.as_ptr().cast();
-        syscall::process_io_queue(base).unwrap();
+        syscall::process_io_queue(Some(queue.base.cast())).unwrap();
         loop {
             if let Ok(e) = queue.dequeue_response() {
                 break e;
             }
-            syscall::wait_io_queue(base).unwrap();
+            syscall::wait_io_queue(Some(queue.base.cast())).unwrap();
         }
     })
 }
