@@ -14,8 +14,7 @@ pub(super) unsafe fn init_thread() {
         tls::init_thread::<_, ()>(|s| {
             Ok(NonNull::new(Box::into_raw(Box::<[u8]>::new_uninit_slice(s)) as *mut *mut ())
                 .unwrap())
-        })
-        .expect("failed to initialize TLS storage");
+        }).unwrap_or_else(|_| crate::intrinsics::abort())
     }
 }
 
