@@ -11,11 +11,19 @@ pub type Key = usize;
 /// This must be called exactly once when a thread is created.
 pub(super) unsafe fn init_thread() {
     unsafe {
-        tls::init_thread::<_, ()>(|s| {
-            Ok(NonNull::new(Box::into_raw(Box::<[u8]>::new_uninit_slice(s)) as *mut *mut ())
-                .unwrap())
+        tls::init_thread(|s| {
+            NonNull::new(Box::into_raw(Box::<[u8]>::new_uninit_slice(s)) as *mut [u8]).unwrap()
         })
-        .unwrap_or_else(|_| crate::intrinsics::abort())
+    }
+}
+/// # Safety
+///
+/// This must be called exactly once when a thread is created.
+pub(super) unsafe fn deinit_thread() {
+    unsafe {
+        tls::deinit_thread(|p| {
+            Box::from_raw(p.as_ptr());
+        })
     }
 }
 

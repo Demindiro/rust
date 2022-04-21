@@ -5,10 +5,11 @@ use crate::mem;
 use crate::num::NonZeroUsize;
 use crate::ptr;
 use crate::time::Duration;
+use norostb_rt::kernel::io::Handle;
 use norostb_rt::kernel::syscall::{self, RWX};
 
 pub struct Thread {
-    handle: usize,
+    handle: Handle,
 }
 
 pub const DEFAULT_MIN_STACK_SIZE: usize = 4096;
@@ -28,7 +29,7 @@ impl Thread {
         let mut stack_ptr = stack_top;
         let mut push = |v: usize| {
             stack_ptr = stack_ptr.wrapping_sub(1);
-            // SAFETY: we will only push two usizes, which should fit well within a single
+            // SAFETY: we will only push four usizes, which should fit well within a single
             // page.
             unsafe {
                 stack_ptr.write(v);
@@ -36,8 +37,16 @@ impl Thread {
         };
         push(ptr as usize);
         push(unsafe { mem::transmute(meta) });
+        push(stack.as_ptr() as usize);
+        push(stack_size.get());
 
-        unsafe extern "C" fn main(ptr: *mut (), meta: usize) -> ! {
+        unsafe extern "C" fn main(
+            ptr: *mut (),
+            meta: usize,
+            stack_base: *const (),
+            stack_size: usize,
+            handle: Handle,
+        ) -> ! {
             let meta = unsafe { mem::transmute(meta) };
             let p: Box<dyn FnOnce()> = unsafe { Box::from_raw(ptr::from_raw_parts_mut(ptr, meta)) };
 
@@ -47,8 +56,29 @@ impl Thread {
 
             p();
 
-            loop {
-                syscall::sleep(crate::time::Duration::MAX);
+            unsafe {
+                super::thread_local_key::deinit_thread();
+            }
+
+            // We're going to free the stack, so we need to resort to assembly
+            unsafe {
+                core::arch::asm!(
+                    // Deallocate stack
+                    "syscall",
+                    // Kill current thread
+                    "mov eax, {kill_thread}",
+                    "mov rdi, {handle}",
+                    "syscall",
+                    kill_thread = const syscall::ID_KILL_THREAD,
+                    // "formatting may not be suitable for sub-register argument" ???
+                    // Hence cast to usize
+                    handle = in(reg) handle as usize,
+                    in("eax") syscall::ID_DEALLOC,
+                    in("rdi") stack_base,
+                    in("rsi") stack_size,
+                    in("rdx") 0,
+                    options(noreturn, nostack),
+                );
             }
         }
 
@@ -58,6 +88,9 @@ impl Thread {
                 crate::arch::asm!("
 					mov rdi, [rsp - 8 * 1]
 					mov rsi, [rsp - 8 * 2]
+					mov rdx, [rsp - 8 * 3]
+					mov rcx, [rsp - 8 * 4]
+					mov r8d, eax
 					jmp {main}
 					",
                     main = sym main,
@@ -69,7 +102,10 @@ impl Thread {
         // Spawn thread
         unsafe {
             syscall::spawn_thread(start, stack_top as *const ())
-                .map_err(|_| io::const_io_error!(io::ErrorKind::Other, "failed to spawn thread"))
+                .map_err(|_| {
+                    syscall::dealloc(stack.cast(), stack_size.get(), false, false).unwrap();
+                    io::const_io_error!(io::ErrorKind::Other, "failed to spawn thread")
+                })
                 .map(|handle| Self { handle })
         }
     }
@@ -87,7 +123,7 @@ impl Thread {
     }
 
     pub fn join(self) {
-        todo!("join thread {}", self.handle);
+        let _ = syscall::wait_thread(self.handle);
     }
 }
 

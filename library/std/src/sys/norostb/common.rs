@@ -24,9 +24,7 @@ pub fn decode_error_kind(_code: i32) -> crate::io::ErrorKind {
 }
 
 pub fn abort_internal() -> ! {
-    unsafe {
-        crate::arch::asm!("hlt; hlt; hlt; ud2", options(noreturn));
-    }
+    super::os::exit(i32::MAX)
 }
 
 pub fn hashmap_random_keys() -> (u64, u64) {

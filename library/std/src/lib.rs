@@ -226,6 +226,7 @@
 #![feature(allow_internal_unstable)]
 #![feature(arbitrary_self_types)]
 #![feature(array_error_internals)]
+#![feature(asm_const)]
 #![feature(asm_sym)]
 #![feature(assert_matches)]
 #![feature(associated_type_bounds)]

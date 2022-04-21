@@ -8,6 +8,7 @@ use crate::sys::fs::File;
 use crate::sys::pipe::AnonPipe;
 use crate::sys::unsupported;
 use crate::sys_common::process::{CommandEnv, CommandEnvs};
+use norostb_rt::kernel::io::Handle;
 
 pub use crate::ffi::OsString as EnvKey;
 
@@ -171,23 +172,25 @@ impl From<u8> for ExitCode {
     }
 }
 
-pub struct Process(!);
+pub struct Process {
+    handle: Handle,
+}
 
 impl Process {
     pub fn id(&self) -> u32 {
-        self.0
+        self.handle
     }
 
     pub fn kill(&mut self) -> io::Result<()> {
-        self.0
+        unsupported()
     }
 
     pub fn wait(&mut self) -> io::Result<ExitStatus> {
-        self.0
+        unsupported()
     }
 
     pub fn try_wait(&mut self) -> io::Result<Option<ExitStatus>> {
-        self.0
+        unsupported()
     }
 }
 
