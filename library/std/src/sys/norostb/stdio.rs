@@ -1,9 +1,9 @@
-use crate::io;
-use norostb_rt::kernel::syscall;
+use crate::{io, sync::atomic::Ordering};
+use norostb_rt::kernel::AtomicHandle;
 
-static STDIN: syscall::Handle = 0;
-static STDOUT: syscall::Handle = 1;
-static STDERR: syscall::Handle = 2;
+static STDIN: AtomicHandle = AtomicHandle::new(0);
+static STDOUT: AtomicHandle = AtomicHandle::new(0);
+static STDERR: AtomicHandle = AtomicHandle::new(0);
 
 pub struct Stdin;
 pub struct Stdout;
@@ -19,7 +19,7 @@ impl Stdin {
 
 impl io::Read for Stdin {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        super::io::read(STDIN, buf)
+        super::io::read(STDIN.load(Ordering::Relaxed), buf)
     }
 }
 
@@ -31,7 +31,7 @@ impl Stdout {
 
 impl io::Write for Stdout {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        super::io::write(STDOUT, buf)
+        super::io::write(STDOUT.load(Ordering::Relaxed), buf)
     }
 
     fn flush(&mut self) -> io::Result<()> {
@@ -47,7 +47,7 @@ impl Stderr {
 
 impl io::Write for Stderr {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        super::io::write(STDERR, buf)
+        super::io::write(STDERR.load(Ordering::Relaxed), buf)
     }
 
     fn flush(&mut self) -> io::Result<()> {
@@ -78,10 +78,7 @@ pub(super) unsafe fn init() {
     // If we couldn't find the table, there is absolutely nothing we can do, so just abort.
     let tbl = tbl.unwrap_or_else(|| core::intrinsics::abort());
 
-    let stdin = super::io::open(tbl, b"0").unwrap();
-    assert_eq!(stdin, STDIN);
-    let stdout = super::io::open(tbl, b"0").unwrap();
-    assert_eq!(stdout, STDOUT);
-    let stderr = super::io::open(tbl, b"0").unwrap();
-    assert_eq!(stderr, STDERR);
+    STDIN.store(super::io::open(tbl, b"0").unwrap(), Ordering::Relaxed);
+    STDOUT.store(super::io::open(tbl, b"0").unwrap(), Ordering::Relaxed);
+    STDERR.store(super::io::open(tbl, b"0").unwrap(), Ordering::Relaxed);
 }
