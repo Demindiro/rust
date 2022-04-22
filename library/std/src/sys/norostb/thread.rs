@@ -67,16 +67,16 @@ impl Thread {
                     "syscall",
                     // Kill current thread
                     "mov eax, {kill_thread}",
-                    "mov rdi, {handle}",
+                    "mov rdi, r12",
                     "syscall",
                     kill_thread = const syscall::ID_KILL_THREAD,
-                    // "formatting may not be suitable for sub-register argument" ???
-                    // Hence cast to usize
-                    handle = in(reg) handle as usize,
                     in("eax") syscall::ID_DEALLOC,
                     in("rdi") stack_base,
                     in("rsi") stack_size,
                     in("rdx") 0,
+                    // Rust is retarded and doesn't let us specify clobbers with out
+                    // so we have to avoid rax, rdx, rcx and r11 manually *sigh*
+                    in("r12") handle,
                     options(noreturn, nostack),
                 );
             }
@@ -90,7 +90,7 @@ impl Thread {
 					mov rsi, [rsp - 8 * 2]
 					mov rdx, [rsp - 8 * 3]
 					mov rcx, [rsp - 8 * 4]
-					mov r8d, eax
+					mov r8, rax
 					jmp {main}
 					",
                     main = sym main,
