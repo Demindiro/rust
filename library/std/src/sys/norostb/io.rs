@@ -232,6 +232,13 @@ pub fn poll(handle: syscall::Handle) -> io::Result<usize> {
     }
 }
 
+/// Blocking close
+#[unstable(feature = "norostb", issue = "none")]
+#[inline]
+pub fn close(handle: syscall::Handle) {
+    enqueue(Request::close(0, handle));
+}
+
 /// Create an iterator over all tables.
 #[unstable(feature = "norostb", issue = "none")]
 #[inline]

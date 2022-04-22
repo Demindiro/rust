@@ -318,6 +318,12 @@ impl File {
     }
 }
 
+impl Drop for File {
+    fn drop(&mut self) {
+        super::io::close(self.handle);
+    }
+}
+
 impl DirBuilder {
     pub fn new() -> DirBuilder {
         DirBuilder {}

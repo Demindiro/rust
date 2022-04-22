@@ -1,5 +1,5 @@
 use crate::sys_common::{AsInner, FromInner, IntoInner};
-use crate::{fs, sys};
+use crate::{fs, mem::ManuallyDrop, sys};
 
 pub type Handle = u32;
 
@@ -23,7 +23,7 @@ impl AsHandle for fs::File {
 
 impl IntoHandle for fs::File {
     fn into_handle(self) -> Handle {
-        self.into_inner().handle
+        ManuallyDrop::new(self.into_inner()).handle
     }
 }
 
