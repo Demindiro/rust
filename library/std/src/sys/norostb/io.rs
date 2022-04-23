@@ -172,7 +172,9 @@ pub fn query(table: syscall::TableId, path: &[u8]) -> io::Result<syscall::Handle
 pub fn query_next(query: syscall::Handle, info: &mut ObjectInfo) -> io::Result<bool> {
     let e = enqueue(Request::query_next(0, query, info));
     if e.value < 0 {
-        Err(io::const_io_error!(io::ErrorKind::Uncategorized, "failed to advance query"))
+        // FIXME the API for quering is kinda broken right now.
+        //Err(io::const_io_error!(io::ErrorKind::Uncategorized, "failed to advance query"))
+        Ok(false)
     } else {
         Ok(e.value > 0)
     }
