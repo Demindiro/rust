@@ -208,17 +208,16 @@ pub fn finish_job(table: syscall::Handle, job: &Job) -> io::Result<()> {
 #[unstable(feature = "norostb", issue = "none")]
 #[inline]
 pub fn seek(handle: syscall::Handle, from: io::SeekFrom) -> io::Result<u64> {
-    let mut offset = 0;
     let from = match from {
         io::SeekFrom::Start(n) => SeekFrom::Start(n),
         io::SeekFrom::End(n) => SeekFrom::End(n),
         io::SeekFrom::Current(n) => SeekFrom::Current(n),
     };
-    let e = enqueue(Request::seek(0, handle, from, &mut offset));
+    let e = enqueue(Request::seek(0, handle, from));
     if e.value < 0 {
         Err(io::const_io_error!(io::ErrorKind::Uncategorized, "failed to seek"))
     } else {
-        Ok(offset)
+        Ok(e.value as u64)
     }
 }
 
