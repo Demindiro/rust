@@ -129,12 +129,9 @@ pub fn setenv(key: &OsStr, value: &OsStr) -> io::Result<()> {
 }
 
 pub fn unsetenv(key: &OsStr) -> io::Result<()> {
-    get_env()
-        .lock()
-        .expect("failed to lock environment map")
-        .remove(key)
-        .map(|_| ())
-        .ok_or(io::const_io_error!(io::ErrorKind::Uncategorized, "environment variable not set"))
+    // Removing non-existent env variables is valid apparently...
+    get_env().lock().expect("failed to lock environment map").remove(key);
+    Ok(())
 }
 
 /// # Safety
