@@ -10,5 +10,6 @@ pub use norostb_rt::kernel::io::{Job, ObjectInfo};
 
 pub mod prelude {
     use super::*;
+    pub use ffi::OsStrExt;
     pub use io::{AsHandle, FromHandle, Handle, IntoHandle};
 }

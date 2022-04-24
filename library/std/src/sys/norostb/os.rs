@@ -7,6 +7,8 @@ use crate::marker::PhantomData;
 use crate::path::{self, PathBuf};
 use norostb_rt::kernel::syscall;
 
+pub use super::args::{env, getenv, setenv, unsetenv, Env};
+
 pub fn errno() -> i32 {
     0
 }
@@ -62,31 +64,6 @@ impl StdError for JoinPathsError {
 
 pub fn current_exe() -> io::Result<PathBuf> {
     unsupported()
-}
-
-pub struct Env(!);
-
-impl Iterator for Env {
-    type Item = (OsString, OsString);
-    fn next(&mut self) -> Option<(OsString, OsString)> {
-        self.0
-    }
-}
-
-pub fn env() -> Env {
-    panic!("not supported on this platform")
-}
-
-pub fn getenv(_: &OsStr) -> Option<OsString> {
-    None
-}
-
-pub fn setenv(_: &OsStr, _: &OsStr) -> io::Result<()> {
-    Err(io::const_io_error!(io::ErrorKind::Unsupported, "cannot set env vars on this platform"))
-}
-
-pub fn unsetenv(_: &OsStr) -> io::Result<()> {
-    Err(io::const_io_error!(io::ErrorKind::Unsupported, "cannot unset env vars on this platform"))
 }
 
 pub fn temp_dir() -> PathBuf {
