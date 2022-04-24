@@ -1,13 +1,18 @@
+use crate::collections::{btree_map, BTreeMap};
 use crate::ffi::{OsStr, OsString};
 use crate::fmt;
 use crate::io;
+use crate::lazy::SyncOnceCell;
 use crate::os::norostb::prelude::*;
 use crate::ptr::{self, NonNull};
 use crate::slice;
-use crate::sync::atomic::{AtomicPtr, Ordering};
+use crate::sync::{
+    atomic::{AtomicPtr, Ordering},
+    Mutex,
+};
 
 static ARGS_AND_ENV: AtomicPtr<u8> = AtomicPtr::new(ptr::null_mut());
-static ENV: AtomicPtr<u8> = AtomicPtr::new(ptr::null_mut());
+static ENV: SyncOnceCell<Mutex<BTreeMap<OsString, OsString>>> = SyncOnceCell::new();
 
 pub struct Args {
     count: usize,
@@ -74,65 +79,62 @@ impl DoubleEndedIterator for Args {
 }
 
 pub struct Env {
-    count: usize,
-    ptr: NonNull<u8>,
-}
-
-impl fmt::Debug for Env {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let env = Env { count: self.count, ptr: self.ptr };
-        let mut f = f.debug_map();
-        for (k, v) in env {
-            f.entry(&k, &v);
-        }
-        f.finish()
-    }
+    inner: btree_map::IntoIter<OsString, OsString>,
 }
 
 impl Iterator for Env {
     type Item = (OsString, OsString);
 
     fn next(&mut self) -> Option<(OsString, OsString)> {
-        self.count.checked_sub(1).map(|c| {
-            self.count = c;
-            unsafe {
-                let (key, ptr) = get_str(self.ptr.as_ptr());
-                let (val, ptr) = get_str(ptr);
-                self.ptr = NonNull::new(ptr).unwrap();
-                (key, val)
-            }
-        })
+        self.inner.next()
     }
+}
+
+fn get_env() -> &'static Mutex<BTreeMap<OsString, OsString>> {
+    ENV.get_or_init(|| {
+        // A finished args iterator will point to the start of the env variables.
+        let mut args = args();
+        (&mut args).last();
+        // Load all env variables in a map so we can easily modify & remove variables.
+        let mut map = BTreeMap::new();
+        unsafe {
+            let ptr = args.ptr.as_ptr().cast::<u16>();
+            let count = usize::from(ptr.read_unaligned());
+            let mut ptr = ptr.add(1).cast::<u8>();
+            for _ in 0..count {
+                let (key, p) = get_str(ptr);
+                let (val, p) = get_str(p);
+                map.insert(key, val);
+                ptr = p;
+            }
+        }
+        Mutex::new(map)
+    })
 }
 
 pub fn env() -> Env {
-    let ptr = NonNull::new(ENV.load(Ordering::Relaxed))
-        .unwrap_or_else(|| {
-            // A finished args iterator will point to the start of the env variables.
-            let mut args = args();
-            (&mut args).last();
-            ENV.store(args.ptr.as_ptr(), Ordering::Relaxed);
-            args.ptr
-        })
-        .cast::<u16>();
-    unsafe {
-        Env {
-            count: usize::from(ptr.as_ptr().read_unaligned()),
-            ptr: NonNull::new(ptr.as_ptr().add(1).cast()).unwrap(),
-        }
-    }
+    // "The returned iterator contains a snapshot of the process’s environment variables ..." &
+    // "Modifications to environment variables afterwards will not be reflected ..."
+    // means we need to clone it, or at least use some kind of CoW.
+    Env { inner: get_env().lock().expect("failed to lock environment map").clone().into_iter() }
 }
 
 pub fn getenv(key: &OsStr) -> Option<OsString> {
-    env().find_map(|(k, v)| (k == key).then(|| v))
+    get_env().lock().expect("failed to lock environment map").get(key).cloned()
 }
 
-pub fn setenv(_: &OsStr, _: &OsStr) -> io::Result<()> {
-    todo!()
+pub fn setenv(key: &OsStr, value: &OsStr) -> io::Result<()> {
+    get_env().lock().expect("failed to lock environment map").insert(key.into(), value.into());
+    Ok(())
 }
 
-pub fn unsetenv(_: &OsStr) -> io::Result<()> {
-    todo!()
+pub fn unsetenv(key: &OsStr) -> io::Result<()> {
+    get_env()
+        .lock()
+        .expect("failed to lock environment map")
+        .remove(key)
+        .map(|_| ())
+        .ok_or(io::const_io_error!(io::ErrorKind::Uncategorized, "environment variable not set"))
 }
 
 /// # Safety
