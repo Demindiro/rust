@@ -25,14 +25,12 @@ use crate::sys::unsupported;
 use crate::sys_common::{AsInner, FromInner};
 use norostb_rt::{
     io as rt_io,
-    table::{ObjectInfo, TableId, TableInfo, TableIter},
+    table::{Object, ObjectInfo, TableId, TableInfo, TableIter},
     Handle,
 };
 
 #[derive(Debug)]
-pub struct File {
-    pub(crate) handle: Handle,
-}
+pub struct File(pub(crate) Object);
 
 const TABLE_OBJECT_SEPARATOR: u8 = b'/';
 
@@ -238,11 +236,11 @@ impl File {
                 return Err(io::const_io_error!(io::ErrorKind::Other, "expected full path"));
             };
             let table = find_table(table)?.0;
-            rt_io::create(table, path).map(|handle| File { handle }).map_err(cvt_err)
+            Object::create(table, path).map(File).map_err(cvt_err)
         } else {
             // Find a unique ID
             let (table_id, path) = split_into_table_and_path(path)?;
-            rt_io::open(table_id, path).map(|handle| File { handle }).map_err(cvt_err)
+            Object::open(table_id, path).map(File).map_err(cvt_err)
         }
     }
 
@@ -265,7 +263,7 @@ impl File {
     }
 
     pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
-        rt_io::read(self.handle, buf).map_err(cvt_err)
+        self.0.read(buf).map_err(cvt_err)
     }
 
     pub fn read_vectored(&self, _bufs: &mut [IoSliceMut<'_>]) -> io::Result<usize> {
@@ -279,7 +277,7 @@ impl File {
     pub fn read_buf(&self, buf: &mut ReadBuf<'_>) -> io::Result<()> {
         // SAFETY: we don't deinitialize any part of the buffer
         let s = unsafe { buf.unfilled_mut() };
-        let len = rt_io::read_uninit(self.handle, s).map_err(cvt_err)?;
+        let len = self.0.read_uninit(s).map_err(cvt_err)?;
         // SAFETY: the kernel has initialized `len` bytes.
         unsafe {
             buf.assume_init(buf.filled().len() + len);
@@ -289,7 +287,7 @@ impl File {
     }
 
     pub fn write(&self, buf: &[u8]) -> io::Result<usize> {
-        rt_io::write(self.handle, buf).map_err(cvt_err)
+        self.0.write(buf).map_err(cvt_err)
     }
 
     pub fn write_vectored(&self, _bufs: &[IoSlice<'_>]) -> io::Result<usize> {
@@ -311,21 +309,15 @@ impl File {
             SeekFrom::Current(n) => rt_io::SeekFrom::Current(n),
             SeekFrom::End(n) => rt_io::SeekFrom::End(n),
         };
-        rt_io::seek(self.handle, pos).map_err(cvt_err)
+        self.0.seek(pos).map_err(cvt_err)
     }
 
     pub fn duplicate(&self) -> io::Result<File> {
-        rt_io::duplicate(self.handle).map_err(cvt_err).map(|handle| Self { handle })
+        self.0.duplicate().map_err(cvt_err).map(Self)
     }
 
     pub fn set_permissions(&self, _perm: FilePermissions) -> io::Result<()> {
         unsupported()
-    }
-}
-
-impl Drop for File {
-    fn drop(&mut self) {
-        rt_io::close(self.handle);
     }
 }
 

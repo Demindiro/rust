@@ -1,5 +1,5 @@
 use crate::sys_common::{AsInner, FromInner, IntoInner};
-use crate::{fs, mem::ManuallyDrop, sys};
+use crate::{fs, sys};
 
 pub type Handle = u32;
 
@@ -17,18 +17,18 @@ pub trait FromHandle {
 
 impl AsHandle for fs::File {
     fn as_handle(&self) -> Handle {
-        self.as_inner().handle
+        self.as_inner().0.as_raw()
     }
 }
 
 impl IntoHandle for fs::File {
     fn into_handle(self) -> Handle {
-        ManuallyDrop::new(self.into_inner()).handle
+        self.into_inner().0.into_raw()
     }
 }
 
 impl FromHandle for fs::File {
     unsafe fn from_handle(handle: Handle) -> Self {
-        Self::from_inner(sys::fs::File { handle })
+        Self::from_inner(sys::fs::File(norostb_rt::table::Object::from_raw(handle)))
     }
 }
