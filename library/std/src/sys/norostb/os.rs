@@ -5,7 +5,6 @@ use crate::fmt;
 use crate::io;
 use crate::marker::PhantomData;
 use crate::path::{self, PathBuf};
-use norostb_rt::kernel::syscall;
 
 pub use super::args::{env, getenv, setenv, unsetenv, Env};
 
@@ -75,7 +74,7 @@ pub fn home_dir() -> Option<PathBuf> {
 }
 
 pub fn exit(code: i32) -> ! {
-    syscall::exit(code)
+    norostb_rt::exit(code)
 }
 
 pub fn getpid() -> u32 {

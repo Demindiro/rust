@@ -44,13 +44,9 @@ pub extern "C" fn __rust_abort() {
 /// # Note
 ///
 /// This is not guaranteed to run, for example when Rust code is called externally.
-// FIXME The current signature is actually wrong, but I'm unsure how to fix it.
-//pub unsafe fn init(_arguments: *const u8) {
-pub unsafe fn init(_argc: isize, _argv: *const *const u8) {
+pub unsafe fn init(_: isize, _: *const *const u8) {
     // FIXME this is not guaranteed to run.
     unsafe {
-        args::init(_argc as *const u8);
-        thread_local_key::init_thread();
         stdio::init();
     }
 }
@@ -63,3 +59,11 @@ pub unsafe fn init(_argc: isize, _argv: *const *const u8) {
 ///
 /// This is not guaranteed to run, for example when Rust code is called externally.
 pub unsafe fn cleanup() {}
+
+fn cvt_err(err: norostb_rt::Error) -> crate::io::Error {
+    use crate::io::{const_io_error, ErrorKind};
+    use norostb_rt::Error;
+    match err {
+        Error::Unknown => const_io_error!(ErrorKind::Uncategorized, "uncategorized error"),
+    }
+}

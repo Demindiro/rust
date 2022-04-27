@@ -1,3 +1,4 @@
+use super::cvt_err;
 /// ## Path format
 ///
 /// ```
@@ -22,9 +23,10 @@ use crate::sys::os_str::Buf;
 use crate::sys::time::SystemTime;
 use crate::sys::unsupported;
 use crate::sys_common::{AsInner, FromInner};
-use norostb_rt::kernel::{
-    io::{Handle, ObjectInfo},
-    syscall::{self, TableId, TableInfo},
+use norostb_rt::{
+    io as rt_io,
+    table::{ObjectInfo, TableId, TableInfo, TableIter},
+    Handle,
 };
 
 #[derive(Debug)]
@@ -40,10 +42,10 @@ pub enum FileAttr {
     Object { size: u64 },
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub enum ReadDir {
     None,
-    Tables(Option<TableId>),
+    Tables(TableIter),
     Objects { table_id: TableId, table_info: TableInfo, query: Handle },
 }
 
@@ -139,15 +141,15 @@ impl Iterator for ReadDir {
     fn next(&mut self) -> Option<io::Result<DirEntry>> {
         match mem::replace(self, Self::None) {
             Self::None => None,
-            Self::Tables(tbl) => syscall::next_table(tbl).map(|(id, info)| {
-                *self = Self::Tables(Some(id));
+            Self::Tables(mut tbl) => tbl.next().map(|(id, info)| {
+                *self = Self::Tables(tbl);
                 Ok(DirEntry::Table { id, info })
             }),
             Self::Objects { table_id, table_info, query } => {
                 let mut inner = Vec::with_capacity(4096);
                 inner.resize(4096, 0);
                 let mut info = ObjectInfo::new(&mut inner);
-                match super::io::query_next(query, &mut info) {
+                match rt_io::query_next(query, &mut info) {
                     Ok(true) => {
                         inner.resize(info.path_len, 0);
                         let name = OsString::from_inner(Buf { inner }).into();
@@ -236,11 +238,11 @@ impl File {
                 return Err(io::const_io_error!(io::ErrorKind::Other, "expected full path"));
             };
             let table = find_table(table)?.0;
-            super::io::create(table, path).map(|handle| File { handle })
+            rt_io::create(table, path).map(|handle| File { handle }).map_err(cvt_err)
         } else {
             // Find a unique ID
             let (table_id, path) = split_into_table_and_path(path)?;
-            super::io::open(table_id, path).map(|handle| File { handle })
+            rt_io::open(table_id, path).map(|handle| File { handle }).map_err(cvt_err)
         }
     }
 
@@ -263,7 +265,7 @@ impl File {
     }
 
     pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
-        super::io::read(self.handle, buf)
+        rt_io::read(self.handle, buf).map_err(cvt_err)
     }
 
     pub fn read_vectored(&self, _bufs: &mut [IoSliceMut<'_>]) -> io::Result<usize> {
@@ -277,7 +279,7 @@ impl File {
     pub fn read_buf(&self, buf: &mut ReadBuf<'_>) -> io::Result<()> {
         // SAFETY: we don't deinitialize any part of the buffer
         let s = unsafe { buf.unfilled_mut() };
-        let len = super::io::read_uninit(self.handle, s)?;
+        let len = rt_io::read_uninit(self.handle, s).map_err(cvt_err)?;
         // SAFETY: the kernel has initialized `len` bytes.
         unsafe {
             buf.assume_init(buf.filled().len() + len);
@@ -287,7 +289,7 @@ impl File {
     }
 
     pub fn write(&self, buf: &[u8]) -> io::Result<usize> {
-        super::io::write(self.handle, buf)
+        rt_io::write(self.handle, buf).map_err(cvt_err)
     }
 
     pub fn write_vectored(&self, _bufs: &[IoSlice<'_>]) -> io::Result<usize> {
@@ -304,13 +306,16 @@ impl File {
     }
 
     pub fn seek(&self, pos: SeekFrom) -> io::Result<u64> {
-        super::io::seek(self.handle, pos)
+        let pos = match pos {
+            SeekFrom::Start(n) => rt_io::SeekFrom::Start(n),
+            SeekFrom::Current(n) => rt_io::SeekFrom::Current(n),
+            SeekFrom::End(n) => rt_io::SeekFrom::End(n),
+        };
+        rt_io::seek(self.handle, pos).map_err(cvt_err)
     }
 
     pub fn duplicate(&self) -> io::Result<File> {
-        syscall::duplicate_handle(self.handle)
-            .map_err(|_| io::const_io_error!(io::ErrorKind::Uncategorized, "TODO failed duplicate"))
-            .map(|handle| Self { handle })
+        rt_io::duplicate(self.handle).map_err(cvt_err).map(|handle| Self { handle })
     }
 
     pub fn set_permissions(&self, _perm: FilePermissions) -> io::Result<()> {
@@ -320,7 +325,7 @@ impl File {
 
 impl Drop for File {
     fn drop(&mut self) {
-        super::io::close(self.handle);
+        rt_io::close(self.handle);
     }
 }
 
@@ -336,15 +341,15 @@ impl DirBuilder {
 
 pub fn readdir(path: &Path) -> io::Result<ReadDir> {
     match split_path(path)? {
-        SplitPath::None => Ok(ReadDir::Tables(None)),
+        SplitPath::None => Ok(ReadDir::Tables(TableIter::new().map_err(cvt_err)?)),
         SplitPath::Table { table } => {
             let (table_id, table_info) = find_table(table)?;
-            let query = super::io::query(table_id, &[])?;
+            let query = rt_io::query(table_id, &[]).map_err(cvt_err)?;
             Ok(ReadDir::Objects { table_id, table_info, query })
         }
         SplitPath::Path { table, path } => {
             let (table_id, table_info) = find_table(table)?;
-            let query = super::io::query(table_id, path)?;
+            let query = rt_io::query(table_id, path).map_err(cvt_err)?;
             Ok(ReadDir::Objects { table_id, table_info, query })
         }
     }

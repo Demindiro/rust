@@ -8,7 +8,7 @@ use crate::sys::fs::File;
 use crate::sys::pipe::AnonPipe;
 use crate::sys::unsupported;
 use crate::sys_common::process::{CommandEnv, CommandEnvs};
-use norostb_rt::kernel::io::Handle;
+use norostb_rt::Handle;
 
 pub use crate::ffi::OsString as EnvKey;
 
