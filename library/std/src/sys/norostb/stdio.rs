@@ -67,18 +67,13 @@ pub fn panic_output() -> Option<impl io::Write> {
 ///
 /// Must be called only once during runtime initialization.
 pub(super) unsafe fn init() {
-    // Find the UART table
-    let mut tbl = None;
-    for (id, info) in rt::table::TableIter::new().unwrap() {
-        if info.name() == b"uart" {
-            tbl = Some(id);
-            break;
-        }
-    }
-    // If we couldn't find the table, there is absolutely nothing we can do, so just abort.
-    let tbl = tbl.unwrap_or_else(|| core::intrinsics::abort());
-
-    STDIN.store(rt::io::open(tbl, b"0").unwrap(), Ordering::Relaxed);
-    STDOUT.store(rt::io::open(tbl, b"0").unwrap(), Ordering::Relaxed);
-    STDERR.store(rt::io::open(tbl, b"0").unwrap(), Ordering::Relaxed);
+    let f = || {
+        rt::io::base_object()
+            .open(b"uart/0")
+            .unwrap_or_else(|_| core::intrinsics::abort())
+            .into_raw()
+    };
+    STDIN.store(f(), Ordering::Relaxed);
+    STDOUT.store(f(), Ordering::Relaxed);
+    STDERR.store(f(), Ordering::Relaxed);
 }
