@@ -65,5 +65,9 @@ fn cvt_err(err: norostb_rt::Error) -> crate::io::Error {
     use norostb_rt::Error;
     match err {
         Error::Unknown => const_io_error!(ErrorKind::Uncategorized, "uncategorized error"),
+        Error::InvalidOperation => const_io_error!(ErrorKind::Unsupported, "invalid operation"),
+        Error::DoesNotExist => const_io_error!(ErrorKind::NotFound, "does not exist"),
+        Error::AlreadyExists => const_io_error!(ErrorKind::AlreadyExists, "already exists"),
+        Error::Cancelled => const_io_error!(ErrorKind::Uncategorized, "cancelled"),
     }
 }
