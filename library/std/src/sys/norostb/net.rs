@@ -30,9 +30,9 @@ macro netpath($fmt:literal, $addr:ident) {{
 
 impl TcpStream {
     pub fn connect(address: io::Result<&SocketAddr>) -> io::Result<TcpStream> {
-        let (l, p) = netpath!("net/default/tcp/connect/{}/{}", address);
+        let (l, p) = netpath!("default/tcp/connect/{}/{}", address);
         Ok(Self {
-            inner: rt::io::base_object().create(&p[..l]).map_err(cvt_err)?,
+            inner: rt::io::net_root().ok_or(super::ERR_UNSET)?.create(&p[..l]).map_err(cvt_err)?,
             read_timeout: Cell::new(None),
             write_timeout: Cell::new(None),
         })
@@ -151,8 +151,10 @@ pub struct TcpListener {
 
 impl TcpListener {
     pub fn bind(address: io::Result<&SocketAddr>) -> io::Result<TcpListener> {
-        let (l, p) = netpath!("net/{}/tcp/listen/{}", address);
-        Ok(Self { inner: rt::io::base_object().create(&p[..l]).map_err(cvt_err)? })
+        let (l, p) = netpath!("{}/tcp/listen/{}", address);
+        Ok(Self {
+            inner: rt::io::net_root().ok_or(super::ERR_UNSET)?.create(&p[..l]).map_err(cvt_err)?,
+        })
     }
 
     pub fn socket_addr(&self) -> io::Result<SocketAddr> {

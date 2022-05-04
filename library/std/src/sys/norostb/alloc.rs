@@ -5,7 +5,7 @@ macro_rules! imp {
         #[inline]
         unsafe fn $fn(&self, $($args:$ty),*) -> $ret {
             unsafe {
-                norostb_rt::alloc::ALLOCATOR.$fn($($args),*)
+                norostb_rt_alloc::Allocator.$fn($($args),*)
             }
         }
     };

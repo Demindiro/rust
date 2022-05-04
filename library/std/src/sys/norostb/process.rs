@@ -1,14 +1,15 @@
-use crate::ffi::OsStr;
+use crate::ffi::{OsStr, OsString};
 use crate::fmt;
 use crate::io;
-use crate::marker::PhantomData;
 use crate::num::NonZeroI32;
+use crate::os::norostb::prelude::*;
 use crate::path::Path;
+use crate::slice::Iter;
 use crate::sys::fs::File;
 use crate::sys::pipe::AnonPipe;
 use crate::sys::unsupported;
 use crate::sys_common::process::{CommandEnv, CommandEnvs};
-use norostb_rt::Handle;
+use norostb_rt as rt;
 
 pub use crate::ffi::OsString as EnvKey;
 
@@ -17,7 +18,10 @@ pub use crate::ffi::OsString as EnvKey;
 ////////////////////////////////////////////////////////////////////////////////
 
 pub struct Command {
+    program: OsString,
     env: CommandEnv,
+    dir: OsString,
+    args: Vec<OsString>,
 }
 
 // passed back to std::process with the pipes connected to the child, if any
@@ -35,30 +39,45 @@ pub enum Stdio {
 }
 
 impl Command {
-    pub fn new(_program: &OsStr) -> Command {
-        Command { env: Default::default() }
+    pub fn new(program: &OsStr) -> Self {
+        Self {
+            program: program.into(),
+            env: Default::default(),
+            dir: Default::default(),
+            args: Default::default(),
+        }
     }
 
-    pub fn arg(&mut self, _arg: &OsStr) {}
+    pub fn arg(&mut self, arg: &OsStr) {
+        self.args.push(arg.into());
+    }
 
     pub fn env_mut(&mut self) -> &mut CommandEnv {
         &mut self.env
     }
 
-    pub fn cwd(&mut self, _dir: &OsStr) {}
+    pub fn cwd(&mut self, dir: &OsStr) {
+        self.dir = dir.into();
+    }
 
-    pub fn stdin(&mut self, _stdin: Stdio) {}
+    pub fn stdin(&mut self, _stdin: Stdio) {
+        todo!()
+    }
 
-    pub fn stdout(&mut self, _stdout: Stdio) {}
+    pub fn stdout(&mut self, _stdout: Stdio) {
+        todo!()
+    }
 
-    pub fn stderr(&mut self, _stderr: Stdio) {}
+    pub fn stderr(&mut self, _stderr: Stdio) {
+        todo!()
+    }
 
     pub fn get_program(&self) -> &OsStr {
         panic!("unsupported")
     }
 
     pub fn get_args(&self) -> CommandArgs<'_> {
-        CommandArgs { _p: PhantomData }
+        CommandArgs(self.args.iter())
     }
 
     pub fn get_envs(&self) -> CommandEnvs<'_> {
@@ -74,7 +93,17 @@ impl Command {
         _default: Stdio,
         _needs_stdin: bool,
     ) -> io::Result<(Process, StdioPipes)> {
-        unsupported()
+        rt::Process::new(
+            &rt::io::file_root()
+                .ok_or(super::ERR_UNSET)?
+                .open(self.program.as_bytes())
+                .map_err(super::cvt_err)?,
+            rt::process::Process::default_handles(),
+            self.args.iter().map(|s| s.as_bytes()),
+            self.env.capture().iter().map(|(k, v)| (k.as_bytes(), v.as_bytes())),
+        )
+        .map_err(super::cvt_err)
+        .map(|p| (Process(p), StdioPipes { stdin: None, stdout: None, stderr: None }))
     }
 }
 
@@ -172,13 +201,11 @@ impl From<u8> for ExitCode {
     }
 }
 
-pub struct Process {
-    handle: Handle,
-}
+pub struct Process(rt::Process);
 
 impl Process {
     pub fn id(&self) -> u32 {
-        self.handle
+        self.0.as_object().as_raw()
     }
 
     pub fn kill(&mut self) -> io::Result<()> {
@@ -194,14 +221,16 @@ impl Process {
     }
 }
 
-pub struct CommandArgs<'a> {
-    _p: PhantomData<&'a ()>,
-}
+pub struct CommandArgs<'a>(Iter<'a, OsString>);
 
 impl<'a> Iterator for CommandArgs<'a> {
     type Item = &'a OsStr;
     fn next(&mut self) -> Option<&'a OsStr> {
-        None
+        self.0.next().map(|s| &**s)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.0.size_hint()
     }
 }
 

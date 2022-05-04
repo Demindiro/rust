@@ -135,6 +135,7 @@ rustc-std-workspace-std = { path = 'library/rustc-std-workspace-std' }
 
 # No norostb packages are published to crates.io
 norostb_rt = { path = "../../norost/b/lib/rust/rt" }
+norostb_rt_alloc = { path = "../../norost/b/lib/rust/rt_alloc" }
 
 [patch."https://github.com/rust-lang/rust-clippy"]
 clippy_lints = { path = "src/tools/clippy/clippy_lints" }

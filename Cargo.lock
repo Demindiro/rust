@@ -2464,6 +2464,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "norostb_rt_alloc"
+version = "0.1.0"
+dependencies = [
+ "compiler_builtins",
+ "norostb_kernel",
+ "rustc-std-workspace-alloc",
+ "rustc-std-workspace-core",
+]
+
+[[package]]
 name = "ntapi"
 version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4950,6 +4960,7 @@ dependencies = [
  "libc",
  "miniz_oxide",
  "norostb_rt",
+ "norostb_rt_alloc",
  "object 0.26.2",
  "panic_abort",
  "panic_unwind",

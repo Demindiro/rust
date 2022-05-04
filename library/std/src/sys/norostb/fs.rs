@@ -154,11 +154,10 @@ impl OpenOptions {
 
 impl File {
     pub fn open(path: &Path, opts: &OpenOptions) -> io::Result<File> {
-        if opts.create {
-            rt_io::base_object().create(path_inner(path)).map(File).map_err(cvt_err)
-        } else {
-            rt_io::base_object().open(path_inner(path)).map(File).map_err(cvt_err)
-        }
+        let root = rt_io::file_root().ok_or(super::ERR_UNSET)?;
+        if opts.create { root.create(path_inner(path)) } else { root.open(path_inner(path)) }
+            .map(File)
+            .map_err(cvt_err)
     }
 
     pub fn file_attr(&self) -> io::Result<FileAttr> {
@@ -247,7 +246,11 @@ impl DirBuilder {
 }
 
 pub fn readdir(path: &Path) -> io::Result<ReadDir> {
-    rt_io::base_object().query(path_inner(path)).map(ReadDir).map_err(cvt_err)
+    rt_io::file_root()
+        .ok_or(super::ERR_UNSET)?
+        .query(path_inner(path))
+        .map(ReadDir)
+        .map_err(cvt_err)
 }
 
 pub fn unlink(_p: &Path) -> io::Result<()> {

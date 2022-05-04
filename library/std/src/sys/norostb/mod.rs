@@ -69,5 +69,10 @@ fn cvt_err(err: norostb_rt::Error) -> crate::io::Error {
         Error::DoesNotExist => const_io_error!(ErrorKind::NotFound, "does not exist"),
         Error::AlreadyExists => const_io_error!(ErrorKind::AlreadyExists, "already exists"),
         Error::Cancelled => const_io_error!(ErrorKind::Uncategorized, "cancelled"),
+        Error::CantCreateObject => const_io_error!(ErrorKind::InvalidInput, "can't create object"),
+        Error::InvalidObject => const_io_error!(ErrorKind::InvalidInput, "invalid object"),
     }
 }
+
+const ERR_UNSET: crate::io::Error =
+    crate::io::const_io_error!(crate::io::ErrorKind::Uncategorized, "handle is not set");

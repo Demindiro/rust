@@ -49,6 +49,7 @@ wasi = { version = "0.11.0", features = ['rustc-dep-of-std'], default-features =
 
 [target.'cfg(target_os = "norostb")'.dependencies]
 norostb_rt = { version = "*", default-features = false, features =["rustc-dep-of-std"] }
+norostb_rt_alloc = { version = "*", default-features = false, features =["rustc-dep-of-std"] }
 
 [features]
 backtrace = [
