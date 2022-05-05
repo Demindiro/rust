@@ -27,7 +27,6 @@ impl Stdout {
 
 impl io::Write for Stdout {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        unsafe { core::arch::asm!("int3") }
         rt::io::stdout().ok_or(super::ERR_UNSET)?.write(buf).map_err(super::cvt_err)
     }
 

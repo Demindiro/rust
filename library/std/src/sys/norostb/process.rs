@@ -94,6 +94,7 @@ impl Command {
         _needs_stdin: bool,
     ) -> io::Result<(Process, StdioPipes)> {
         rt::Process::new(
+            &*rt::io::process_root().ok_or(super::ERR_UNSET)?,
             &rt::io::file_root()
                 .ok_or(super::ERR_UNSET)?
                 .open(self.program.as_bytes())
