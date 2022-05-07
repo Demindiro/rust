@@ -7,7 +7,7 @@ use norostb_rt as rt;
 
 pub struct Thread(rt::thread::Thread);
 
-pub const DEFAULT_MIN_STACK_SIZE: usize = 4096;
+pub const DEFAULT_MIN_STACK_SIZE: usize = 1 << 16;
 
 impl Thread {
     // unsafe: see thread::Builder::spawn_unchecked for safety requirements
