@@ -31,7 +31,7 @@ pub struct File(pub(crate) Object);
 pub enum FileAttr {}
 
 #[derive(Debug)]
-pub struct ReadDir(rt_io::Query);
+pub struct ReadDir(Object);
 
 #[derive(Clone, Debug)]
 pub struct DirEntry(OsString);
@@ -112,7 +112,15 @@ impl Iterator for ReadDir {
     type Item = io::Result<DirEntry>;
 
     fn next(&mut self) -> Option<io::Result<DirEntry>> {
-        self.0.next().map(|path| Ok(DirEntry(OsString::from_vec(path))))
+        let mut path = Vec::from([0; 4096]);
+        self.0
+            .read(&mut path)
+            .map(|l| (l > 0).then(|| {
+                path.resize(l, 0);
+                DirEntry(OsString::from_vec(path))
+            }))
+            .map_err(cvt_err)
+            .transpose()
     }
 }
 
@@ -248,7 +256,7 @@ impl DirBuilder {
 pub fn readdir(path: &Path) -> io::Result<ReadDir> {
     rt_io::file_root()
         .ok_or(super::ERR_UNSET)?
-        .query(path_inner(path))
+        .open(path_inner(path))
         .map(ReadDir)
         .map_err(cvt_err)
 }
