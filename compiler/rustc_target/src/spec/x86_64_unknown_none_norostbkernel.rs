@@ -13,6 +13,7 @@ pub fn target() -> Target {
             features:
                 "-mmx,-sse,-sse2,-sse3,-ssse3,-sse4.1,-sse4.2,-3dnow,-3dnowa,-avx,-avx2,+soft-float"
                     .into(),
+            disable_redzone: true,
             ..super::norostb_kernel_base::opts()
         },
     }
