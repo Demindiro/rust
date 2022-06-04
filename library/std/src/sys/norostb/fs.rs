@@ -31,7 +31,7 @@ pub struct File(pub(crate) Object);
 pub enum FileAttr {}
 
 #[derive(Debug)]
-pub struct ReadDir(Object);
+pub struct ReadDir(Option<Object>);
 
 #[derive(Clone, Debug)]
 pub struct DirEntry(OsString);
@@ -112,15 +112,19 @@ impl Iterator for ReadDir {
     type Item = io::Result<DirEntry>;
 
     fn next(&mut self) -> Option<io::Result<DirEntry>> {
-        let mut path = Vec::from([0; 4096]);
-        self.0
-            .read(&mut path)
-            .map(|l| (l > 0).then(|| {
-                path.resize(l, 0);
-                DirEntry(OsString::from_vec(path))
-            }))
-            .map_err(cvt_err)
-            .transpose()
+        let mut path = Vec::with_capacity(4096);
+        match self.0.as_mut()?.read_uninit(path.spare_capacity_mut()) {
+            Ok(0) => None,
+            Ok(l) => {
+                // SAFETY: read_uninit has initialized at least l bytes.
+                unsafe { path.set_len(l) }
+                Some(Ok(DirEntry(OsString::from_vec(path))))
+            }
+            Err(e) => {
+                self.0 = None;
+                Some(Err(cvt_err(e)))
+            }
+        }
     }
 }
 
@@ -254,10 +258,20 @@ impl DirBuilder {
 }
 
 pub fn readdir(path: &Path) -> io::Result<ReadDir> {
+    let mut p;
+    let path = path_inner(path);
+    let path = if path.last() != Some(&b'/') {
+        p = Vec::with_capacity(path.len() + 1);
+        p.extend(path);
+        p.push(b'/');
+        &p[..]
+    } else {
+        path
+    };
     rt_io::file_root()
         .ok_or(super::ERR_UNSET)?
-        .open(path_inner(path))
-        .map(ReadDir)
+        .open(path)
+        .map(|o| ReadDir(Some(o)))
         .map_err(cvt_err)
 }
 
