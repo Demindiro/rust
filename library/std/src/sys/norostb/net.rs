@@ -1,5 +1,4 @@
 use super::cvt_err;
-use crate::cell::Cell;
 use crate::convert::TryFrom;
 use crate::io::{self, IoSlice, IoSliceMut, Write};
 use crate::net::{Ipv4Addr, Ipv6Addr, Shutdown, SocketAddr};
@@ -8,11 +7,7 @@ use crate::time::Duration;
 use norostb_rt as rt;
 
 #[derive(Debug)]
-pub struct TcpStream {
-    inner: rt::Object,
-    read_timeout: Cell<Option<Duration>>,
-    write_timeout: Cell<Option<Duration>>,
-}
+pub struct TcpStream(pub(crate) rt::Object);
 
 macro netpath($fmt:literal, $addr:ident) {{
     let addr = $addr?;
@@ -31,41 +26,35 @@ macro netpath($fmt:literal, $addr:ident) {{
 impl TcpStream {
     pub fn connect(address: io::Result<&SocketAddr>) -> io::Result<TcpStream> {
         let (l, p) = netpath!("default/tcp/connect/{}/{}", address);
-        Ok(Self {
-            inner: rt::io::net_root().ok_or(super::ERR_UNSET)?.create(&p[..l]).map_err(cvt_err)?,
-            read_timeout: Cell::new(None),
-            write_timeout: Cell::new(None),
-        })
+        rt::io::net_root().ok_or(super::ERR_UNSET)?.create(&p[..l]).map(Self).map_err(cvt_err)
     }
 
     pub fn connect_timeout(_address: &SocketAddr, _timeout: Duration) -> io::Result<TcpStream> {
         unsupported()
     }
 
-    pub fn set_read_timeout(&self, timeout: Option<Duration>) -> io::Result<()> {
-        self.read_timeout.set(timeout);
-        Ok(())
+    pub fn set_read_timeout(&self, _timeout: Option<Duration>) -> io::Result<()> {
+        unsupported()
     }
 
-    pub fn set_write_timeout(&self, timeout: Option<Duration>) -> io::Result<()> {
-        self.write_timeout.set(timeout);
-        Ok(())
+    pub fn set_write_timeout(&self, _timeout: Option<Duration>) -> io::Result<()> {
+        unsupported()
     }
 
     pub fn read_timeout(&self) -> io::Result<Option<Duration>> {
-        Ok(self.read_timeout.get())
+        unsupported()
     }
 
     pub fn write_timeout(&self) -> io::Result<Option<Duration>> {
-        Ok(self.write_timeout.get())
+        unsupported()
     }
 
     pub fn peek(&self, data: &mut [u8]) -> io::Result<usize> {
-        self.inner.peek(data).map_err(cvt_err)
+        self.0.peek(data).map_err(cvt_err)
     }
 
     pub fn read(&self, data: &mut [u8]) -> io::Result<usize> {
-        self.inner.read(data).map_err(cvt_err)
+        self.0.read(data).map_err(cvt_err)
     }
 
     pub fn read_vectored(&self, _data: &mut [IoSliceMut<'_>]) -> io::Result<usize> {
@@ -77,7 +66,7 @@ impl TcpStream {
     }
 
     pub fn write(&self, data: &[u8]) -> io::Result<usize> {
-        self.inner.write(data).map_err(cvt_err)
+        self.0.write(data).map_err(cvt_err)
     }
 
     pub fn write_vectored(&self, _data: &[IoSlice<'_>]) -> io::Result<usize> {
@@ -101,14 +90,7 @@ impl TcpStream {
     }
 
     pub fn duplicate(&self) -> io::Result<TcpStream> {
-        self.inner
-            .duplicate()
-            .map(|inner| Self {
-                inner,
-                read_timeout: self.read_timeout.clone(),
-                write_timeout: self.write_timeout.clone(),
-            })
-            .map_err(cvt_err)
+        self.0.duplicate().map(Self).map_err(cvt_err)
     }
 
     pub fn set_linger(&self, _: Option<Duration>) -> io::Result<()> {
@@ -145,16 +127,12 @@ impl TcpStream {
 }
 
 #[derive(Debug)]
-pub struct TcpListener {
-    inner: rt::Object,
-}
+pub struct TcpListener(pub(crate) rt::Object);
 
 impl TcpListener {
     pub fn bind(address: io::Result<&SocketAddr>) -> io::Result<TcpListener> {
         let (l, p) = netpath!("{}/tcp/listen/{}", address);
-        Ok(Self {
-            inner: rt::io::net_root().ok_or(super::ERR_UNSET)?.create(&p[..l]).map_err(cvt_err)?,
-        })
+        rt::io::net_root().ok_or(super::ERR_UNSET)?.create(&p[..l]).map(Self).map_err(cvt_err)
     }
 
     pub fn socket_addr(&self) -> io::Result<SocketAddr> {
@@ -162,9 +140,7 @@ impl TcpListener {
     }
 
     pub fn accept(&self) -> io::Result<(TcpStream, SocketAddr)> {
-        self.inner.open(b"accept").map_err(cvt_err).and_then(|inner| {
-            let peer =
-                TcpStream { inner, read_timeout: Cell::new(None), write_timeout: Cell::new(None) };
+        self.0.open(b"accept").map(TcpStream).map_err(cvt_err).and_then(|peer| {
             // FIXME
             Ok((peer, "0.0.0.0:0".parse().unwrap()))
             //peer.socket_addr().map(|addr| (peer, addr))
@@ -204,11 +180,7 @@ impl TcpListener {
 }
 
 #[derive(Debug)]
-pub struct UdpSocket {
-    inner: super::fs::File,
-    read_timeout: Cell<Option<Duration>>,
-    write_timeout: Cell<Option<Duration>>,
-}
+pub struct UdpSocket(pub(crate) rt::Object);
 
 impl UdpSocket {
     pub fn bind(_: io::Result<&SocketAddr>) -> io::Result<UdpSocket> {
@@ -236,29 +208,23 @@ impl UdpSocket {
     }
 
     pub fn duplicate(&self) -> io::Result<UdpSocket> {
-        self.inner.duplicate().map(|inner| Self {
-            inner,
-            read_timeout: self.read_timeout.clone(),
-            write_timeout: self.write_timeout.clone(),
-        })
+        self.0.duplicate().map(Self).map_err(cvt_err)
     }
 
-    pub fn set_read_timeout(&self, timeout: Option<Duration>) -> io::Result<()> {
-        self.read_timeout.set(timeout);
-        Ok(())
+    pub fn set_read_timeout(&self, _timeout: Option<Duration>) -> io::Result<()> {
+        unsupported()
     }
 
-    pub fn set_write_timeout(&self, timeout: Option<Duration>) -> io::Result<()> {
-        self.write_timeout.set(timeout);
-        Ok(())
+    pub fn set_write_timeout(&self, _timeout: Option<Duration>) -> io::Result<()> {
+        unsupported()
     }
 
     pub fn read_timeout(&self) -> io::Result<Option<Duration>> {
-        Ok(self.read_timeout.get())
+        unsupported()
     }
 
     pub fn write_timeout(&self) -> io::Result<Option<Duration>> {
-        Ok(self.write_timeout.get())
+        unsupported()
     }
 
     pub fn set_broadcast(&self, _: bool) -> io::Result<()> {
