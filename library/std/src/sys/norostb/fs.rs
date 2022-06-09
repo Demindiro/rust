@@ -112,14 +112,9 @@ impl Iterator for ReadDir {
     type Item = io::Result<DirEntry>;
 
     fn next(&mut self) -> Option<io::Result<DirEntry>> {
-        let mut path = Vec::with_capacity(4096);
-        match self.0.as_mut()?.read_uninit(path.spare_capacity_mut()) {
-            Ok(0) => None,
-            Ok(l) => {
-                // SAFETY: read_uninit has initialized at least l bytes.
-                unsafe { path.set_len(l) }
-                Some(Ok(DirEntry(OsString::from_vec(path))))
-            }
+        match self.0.as_mut()?.read_vec(4096) {
+            Ok(v) if v.is_empty() => None,
+            Ok(v) => Some(Ok(DirEntry(OsString::from_vec(v)))),
             Err(e) => {
                 self.0 = None;
                 Some(Err(cvt_err(e)))
@@ -203,7 +198,7 @@ impl File {
     pub fn read_buf(&self, buf: &mut ReadBuf<'_>) -> io::Result<()> {
         // SAFETY: we don't deinitialize any part of the buffer
         let s = unsafe { buf.unfilled_mut() };
-        let len = self.0.read_uninit(s).map_err(cvt_err)?;
+        let len = self.0.read_uninit(s).map_err(cvt_err)?.0.len();
         // SAFETY: the kernel has initialized `len` bytes.
         unsafe {
             buf.assume_init(buf.filled().len() + len);
