@@ -4,10 +4,10 @@ use crate::io::{self, IoSlice, IoSliceMut, Write};
 use crate::net::{Ipv4Addr, Ipv6Addr, Shutdown, SocketAddr};
 use crate::sys::unsupported;
 use crate::time::Duration;
-use norostb_rt as rt;
+use norostb_rt::{self as rt, NewObject, Object};
 
 #[derive(Debug)]
-pub struct TcpStream(pub(crate) rt::Object);
+pub struct TcpStream(pub(crate) Object);
 
 macro netpath($fmt:literal, $addr:ident) {{
     let addr = $addr?;
@@ -90,7 +90,7 @@ impl TcpStream {
     }
 
     pub fn duplicate(&self) -> io::Result<TcpStream> {
-        self.0.duplicate().map(Self).map_err(cvt_err)
+        Object::new(NewObject::Duplicate { handle: self.0.as_raw() }).map_err(cvt_err).map(Self)
     }
 
     pub fn set_linger(&self, _: Option<Duration>) -> io::Result<()> {
@@ -208,7 +208,7 @@ impl UdpSocket {
     }
 
     pub fn duplicate(&self) -> io::Result<UdpSocket> {
-        self.0.duplicate().map(Self).map_err(cvt_err)
+        Object::new(NewObject::Duplicate { handle: self.0.as_raw() }).map_err(cvt_err).map(Self)
     }
 
     pub fn set_read_timeout(&self, _timeout: Option<Duration>) -> io::Result<()> {

@@ -22,7 +22,7 @@ use crate::path::{Path, PathBuf};
 use crate::sys::time::SystemTime;
 use crate::sys::unsupported;
 use crate::sys_common::AsInner;
-use norostb_rt::{io as rt_io, table::Object};
+use norostb_rt::{io as rt_io, NewObject, Object};
 
 #[derive(Debug)]
 pub struct File(pub(crate) Object);
@@ -234,7 +234,7 @@ impl File {
     }
 
     pub fn duplicate(&self) -> io::Result<File> {
-        self.0.duplicate().map_err(cvt_err).map(Self)
+        Object::new(NewObject::Duplicate { handle: self.0.as_raw() }).map_err(cvt_err).map(Self)
     }
 
     pub fn set_permissions(&self, _perm: FilePermissions) -> io::Result<()> {
