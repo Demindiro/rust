@@ -112,9 +112,15 @@ impl Iterator for ReadDir {
     type Item = io::Result<DirEntry>;
 
     fn next(&mut self) -> Option<io::Result<DirEntry>> {
-        match self.0.as_mut()?.read_vec(4096) {
-            Ok(v) if v.is_empty() => None,
-            Ok(v) => Some(Ok(DirEntry(OsString::from_vec(v)))),
+        let mut vec = Vec::with_capacity(4096);
+        match self.0.as_mut()?.read_uninit(vec.spare_capacity_mut()) {
+            Ok((i, _)) if i.is_empty() => None,
+            Ok((i, _)) => {
+                let l = i.len();
+                // SAFETY: all bytes in i are initialized and i is a slice of vec
+                unsafe { vec.set_len(l) }
+                Some(Ok(DirEntry(OsString::from_vec(vec))))
+            }
             Err(e) => {
                 self.0 = None;
                 Some(Err(cvt_err(e)))
@@ -270,8 +276,8 @@ pub fn readdir(path: &Path) -> io::Result<ReadDir> {
         .map_err(cvt_err)
 }
 
-pub fn unlink(_p: &Path) -> io::Result<()> {
-    unsupported()
+pub fn unlink(p: &Path) -> io::Result<()> {
+    rt_io::file_root().ok_or(super::ERR_UNSET)?.destroy(path_inner(p)).map(|_| ()).map_err(cvt_err)
 }
 
 pub fn rename(_old: &Path, _new: &Path) -> io::Result<()> {
@@ -282,12 +288,12 @@ pub fn set_perm(_p: &Path, _perm: FilePermissions) -> io::Result<()> {
     unsupported()
 }
 
-pub fn rmdir(_p: &Path) -> io::Result<()> {
-    unsupported()
+pub fn rmdir(p: &Path) -> io::Result<()> {
+    unlink(p)
 }
 
-pub fn remove_dir_all(_path: &Path) -> io::Result<()> {
-    unsupported()
+pub fn remove_dir_all(path: &Path) -> io::Result<()> {
+    rmdir(path)
 }
 
 pub fn try_exists(path: &Path) -> io::Result<bool> {
