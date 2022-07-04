@@ -11,6 +11,11 @@ pub fn target() -> Target {
             cpu: "x86-64".into(),
             disable_redzone: false,
             max_atomic_width: Some(64),
+            // All these features have been present in all processors produced since 2008.
+            // According to https://store.steampowered.com/hwsurvey only ~1% of all users
+            // miss any of these features. Given that SSE2 on its own kinda sucks we enable
+            // these other features, which should be very advantageous in the long run.
+            features: "+mmx,+sse,+sse2,+sse3,+ssse3,+sse4.1,+sse4.2,+popcnt".into(),
             ..super::norostb_base::opts()
         },
     }
